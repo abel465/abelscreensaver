@@ -1,0 +1,12 @@
+[package]
+name = "abelscreensaver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+auto_enums = "0.8.5"
+bisection = "0.1.0"
+mime_guess = "2.0.4"
+rand = "0.8.5"
+structopt = "0.3.26"
+walkdir = "2.5.0"
