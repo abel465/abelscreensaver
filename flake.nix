@@ -21,6 +21,7 @@
             rustfmt
             clippy
           ];
+          LD_LIBRARY_PATH = "${lib.makeLibraryPath [wayland libxkbcommon libGL]}";
         };
     });
 }
