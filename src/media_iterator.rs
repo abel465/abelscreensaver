@@ -147,7 +147,7 @@ fn is_valid_media<P: AsRef<Path>>(path: P) -> bool {
 }
 
 fn is_hidden(str: &OsStr) -> bool {
-    str.to_str().map_or(true, |s| s.starts_with("."))
+    str.to_str().map_or(true, |s| s.starts_with('.'))
 }
 
 pub fn unspecified_media_iterator(opts: Opt) -> impl Iterator<Item = PathBuf> {

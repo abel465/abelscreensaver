@@ -13,7 +13,7 @@ use structopt::StructOpt;
 pub const INITIAL_WINDOW_SIZE: egui::Vec2 = egui::Vec2::splat(1.0);
 
 fn parse_millis(src: &str) -> Result<Duration, ParseIntError> {
-    src.parse().map(|x| Duration::from_millis(x))
+    src.parse().map(Duration::from_millis)
 }
 
 #[derive(Debug, StructOpt, Clone)]
