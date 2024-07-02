@@ -12,3 +12,4 @@ mime_guess = "2.0.4"
 rand = "0.8.5"
 structopt = "0.3.26"
 walkdir = "2.5.0"
+egui-video = { version = "0.6.0", default-features = false, path="../egui-video/" }

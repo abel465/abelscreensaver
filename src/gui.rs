@@ -3,6 +3,7 @@ use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions, Vec2, Viewpo
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, GenericImageView};
+use std::mem::{replace, take};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -31,6 +32,7 @@ impl GifFrame {
 enum Image {
     Static(TextureHandle),
     Gif(Gif),
+    Video(egui_video::Player),
 }
 
 pub struct MyApp<I: Iterator<Item = PathBuf>> {
@@ -43,6 +45,7 @@ pub struct MyApp<I: Iterator<Item = PathBuf>> {
     current_duration: Option<Duration>,
     it: I,
     window_size: Vec2,
+    audio_device: Option<egui_video::AudioDevice>,
 }
 
 impl<I: Iterator<Item = PathBuf>> MyApp<I> {
@@ -60,14 +63,17 @@ impl<I: Iterator<Item = PathBuf>> MyApp<I> {
             current_duration: None,
             it,
             window_size: INITIAL_WINDOW_SIZE,
+            audio_device: egui_video::AudioDevice::new().ok(),
         }
     }
 
     fn initialize(&mut self, ctx: &egui::Context, window_size: Vec2) {
         if window_size != self.window_size {
-            self.current_image = get_image(self.current_entry.as_deref(), window_size, ctx);
-            self.next_image = get_image(self.next_entry.as_deref(), window_size, ctx);
-            self.current_duration = get_duration(&self.current_image, self.opts.period);
+            let current_entry = take(&mut self.current_entry);
+            self.current_image = self.get_image(current_entry, window_size, ctx);
+            let next_entry = take(&mut self.next_entry);
+            self.next_image = self.get_image(next_entry, window_size, ctx);
+            self.current_duration = get_duration(self.current_image.as_ref(), self.opts.period);
             if self.window_size == INITIAL_WINDOW_SIZE {
                 self.last_image_time = Instant::now();
             }
@@ -84,11 +90,11 @@ impl<I: Iterator<Item = PathBuf>> MyApp<I> {
     ) -> Option<Duration> {
         maybe_duration.map(|duration| {
             if elapsed > duration {
-                std::mem::swap(&mut self.current_entry, &mut self.next_entry);
-                std::mem::swap(&mut self.current_image, &mut self.next_image);
-                self.next_entry = self.it.next();
-                self.next_image = get_image(self.next_entry.as_deref(), window_size, ctx);
-                self.current_duration = get_duration(&self.current_image, self.opts.period);
+                self.current_entry = replace(&mut self.next_entry, self.it.next());
+                let next_entry = take(&mut self.next_entry);
+                let next_image = self.get_image(next_entry, window_size, ctx);
+                self.current_image = replace(&mut self.next_image, next_image);
+                self.current_duration = get_duration(self.current_image.as_ref(), self.opts.period);
                 self.last_image_time = Instant::now();
                 println!("{:?}", self.current_entry);
                 Duration::ZERO
@@ -96,6 +102,36 @@ impl<I: Iterator<Item = PathBuf>> MyApp<I> {
                 elapsed
             }
         })
+    }
+
+    fn get_image(
+        &mut self,
+        entry: Option<PathBuf>,
+        window_size: Vec2,
+        ctx: &egui::Context,
+    ) -> Option<Image> {
+        use mime_guess::mime;
+        entry.and_then(|path| {
+            mime_guess::from_path(path.as_path()).first().and_then(|x| {
+                match (x.type_(), x.subtype()) {
+                    (mime::IMAGE, mime::GIF) => {
+                        get_animated_image(path.as_path(), window_size, ctx)
+                    }
+                    (mime::IMAGE, _) => get_static_image(path.as_path(), window_size, ctx),
+                    (mime::VIDEO, _) => self.get_video(path, ctx),
+                    _ => panic!(),
+                }
+            })
+        })
+    }
+
+    fn get_video(&mut self, path: PathBuf, ctx: &egui::Context) -> Option<Image> {
+        let input_path = path.to_string_lossy().to_string();
+        let mut player = egui_video::Player::new(ctx, &input_path).unwrap();
+        self.audio_device
+            .as_mut()
+            .map(|audio_device| player.add_audio(audio_device).ok());
+        Some(Image::Video(player))
     }
 }
 
@@ -109,13 +145,13 @@ impl<I: Iterator<Item = PathBuf>> eframe::App for MyApp<I> {
         let elapsed = Instant::now() - self.last_image_time;
         let (Some(elapsed), Some(current_image)) = (
             self.maybe_advance(ctx, window_size, elapsed, self.current_duration),
-            &self.current_image,
+            &mut self.current_image,
         ) else {
             ctx.send_viewport_cmd(ViewportCommand::Close);
             return;
         };
         let (current_texture, repaint_after) = match current_image {
-            Image::Static(texture) => (texture, self.opts.period - elapsed),
+            Image::Static(texture) => (&*texture, self.opts.period - elapsed),
             Image::Gif(gif) => {
                 let mut i = 0;
                 let mut time = gif.frames[0].duration;
@@ -124,6 +160,12 @@ impl<I: Iterator<Item = PathBuf>> eframe::App for MyApp<I> {
                     time += gif.frames[i].duration;
                 }
                 (&gif.frames[i].texture, time - elapsed)
+            }
+            Image::Video(player) => {
+                if player.player_state.get() == egui_video::PlayerState::Stopped {
+                    player.start();
+                }
+                (&player.texture_handle, Duration::MAX)
             }
         };
         egui::CentralPanel::default()
@@ -140,10 +182,11 @@ impl<I: Iterator<Item = PathBuf>> eframe::App for MyApp<I> {
     }
 }
 
-fn get_duration(image: &Option<Image>, period: Duration) -> Option<Duration> {
-    image.as_ref().map(|image| match image {
+fn get_duration(image: Option<&Image>, period: Duration) -> Option<Duration> {
+    image.map(|image| match image {
         Image::Static(_) => period,
         Image::Gif(gif) => gif.duration,
+        Image::Video(player) => Duration::from_millis(player.duration_ms as u64),
     })
 }
 
@@ -174,19 +217,6 @@ fn get_animated_image(path: &Path, window_size: Vec2, ctx: &egui::Context) -> Op
             let duration = frames.iter().map(|frame| frame.duration).sum();
             Image::Gif(Gif::new(frames, duration))
         })
-    })
-}
-
-fn get_image(entry: Option<&Path>, window_size: Vec2, ctx: &egui::Context) -> Option<Image> {
-    use mime_guess::mime;
-    entry.and_then(|path| {
-        mime_guess::from_path(path)
-            .first()
-            .and_then(|x| match (x.type_(), x.subtype()) {
-                (mime::IMAGE, mime::GIF) => get_animated_image(path, window_size, ctx),
-                (mime::IMAGE, _) => get_static_image(path, window_size, ctx),
-                _ => panic!(),
-            })
     })
 }
 

@@ -143,7 +143,7 @@ fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Opt, tx: Sender<Message>) {
 fn is_valid_media<P: AsRef<Path>>(path: P) -> bool {
     mime_guess::from_path(path)
         .first()
-        .map_or(false, |x| matches!(x.type_(), mime::IMAGE))
+        .map_or(false, |x| matches!(x.type_(), mime::IMAGE | mime::VIDEO))
 }
 
 fn is_hidden(str: &OsStr) -> bool {
