@@ -27,11 +27,15 @@
         mkShell {
           buildInputs = [
             cargo
+            rustc
             rust-analyzer
             rustfmt
             clippy
+            mpv
+            cmake
+            pkg-config
+            fontconfig
           ];
-          LD_LIBRARY_PATH = "${lib.makeLibraryPath [wayland libxkbcommon libGL]}";
         };
     });
 }
