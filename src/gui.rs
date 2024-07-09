@@ -41,6 +41,7 @@ fn setup_mpv(event_loop: &EventLoop<MPVEvent>, display: Display) -> (libmpv::Mpv
     render_context.set_update_callback(move || {
         event_proxy.send_event(MPVEvent::MPVRenderUpdate).unwrap();
     });
+    mpv.event_context_mut().disable_deprecated_events().unwrap();
 
     (mpv, render_context)
 }
@@ -133,13 +134,16 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                                 )])
                                 .unwrap();
                             }
-                            current_path = mpv.get_property::<String>("path").unwrap();
                         }
                         Some(Ok(libmpv::events::Event::EndFile(_))) => {
                             if mpv.get_property::<String>("playlist-pos").unwrap() == "-1" {
                                 *ctrl_flow = ControlFlow::Exit;
                                 break;
                             }
+                        }
+                        Some(Ok(libmpv::events::Event::FileLoaded)) => {
+                            current_path = mpv.get_property::<String>("path").unwrap();
+                            println!("{}", current_path);
                         }
                         Some(Ok(_)) => {}
                         Some(Err(err)) => {

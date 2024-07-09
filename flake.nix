@@ -35,6 +35,7 @@
             cmake
             pkg-config
             fontconfig
+            ffmpeg
           ];
         };
     });
