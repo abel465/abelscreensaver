@@ -47,6 +47,9 @@ fn setup_mpv(event_loop: &EventLoop<MPVEvent>, display: Display) -> (libmpv::Mpv
 }
 
 pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
+    let Some(first_path) = it.next() else {
+        return;
+    };
     let event_loop = glutin::event_loop::EventLoopBuilder::<MPVEvent>::with_user_event().build();
     let size = event_loop
         .primary_monitor()
@@ -73,16 +76,15 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
         opts.period.as_secs_f32().to_string(),
     )
     .unwrap();
+    mpv.playlist_load_files(&[(
+        &first_path.to_str().unwrap(),
+        libmpv::FileState::AppendPlay,
+        None,
+    )])
+    .unwrap();
 
     let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl.clone(), None);
-
     let mut current_path = String::new();
-    if let Some(path) = it.next() {
-        mpv.playlist_load_files(&[(&path.to_str().unwrap(), libmpv::FileState::AppendPlay, None)])
-            .unwrap();
-    } else {
-        return;
-    }
 
     event_loop.run(move |event, _, ctrl_flow| {
         *ctrl_flow = ControlFlow::Wait;
