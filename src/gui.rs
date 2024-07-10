@@ -132,6 +132,11 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                         winit::event::VirtualKeyCode::Right => {
                             let _ = mpv.playlist_next_weak();
                         }
+                        winit::event::VirtualKeyCode::M => {
+                            let mute = mpv.get_property::<String>("mute").unwrap();
+                            let new_mute = if mute == "yes" { "no" } else { "yes" };
+                            mpv.set_property::<&str>("mute", new_mute).unwrap();
+                        }
                         _ => {}
                     },
                     _ => {}
