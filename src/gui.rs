@@ -1,4 +1,5 @@
 use crate::Opt;
+use egui_glow::egui_winit::winit;
 use glutin::event::{Event, WindowEvent};
 use glutin::event_loop::{ControlFlow, EventLoop};
 use glutin::{ContextWrapper, PossiblyCurrent};
@@ -116,6 +117,23 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                     WindowEvent::CloseRequested => {
                         *ctrl_flow = ControlFlow::Exit;
                     }
+                    WindowEvent::KeyboardInput {
+                        input:
+                            winit::event::KeyboardInput {
+                                virtual_keycode: Some(key),
+                                state: winit::event::ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    } => match key {
+                        winit::event::VirtualKeyCode::Left => {
+                            let _ = mpv.playlist_previous_weak();
+                        }
+                        winit::event::VirtualKeyCode::Right => {
+                            let _ = mpv.playlist_next_weak();
+                        }
+                        _ => {}
+                    },
                     _ => {}
                 }
                 if egui_glow.on_event(&event).repaint {
