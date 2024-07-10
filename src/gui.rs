@@ -118,13 +118,12 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                     }
                     _ => {}
                 }
-                let _ = egui_glow.on_event(&event);
-                window.window().request_redraw();
-            }
-            Event::UserEvent(event) => match event {
-                MPVEvent::MPVRenderUpdate => {
+                if egui_glow.on_event(&event).repaint {
                     window.window().request_redraw();
                 }
+            }
+            Event::UserEvent(event) => match event {
+                MPVEvent::MPVRenderUpdate => window.window().request_redraw(),
                 MPVEvent::MPVEventUpdate => loop {
                     match mpv.event_context_mut().wait_event(0.0) {
                         Some(Ok(libmpv::events::Event::StartFile)) => {
