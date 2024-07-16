@@ -1,7 +1,7 @@
 use crate::Opt;
 use egui_glow::egui_winit::winit;
 use glutin::event::{Event, WindowEvent};
-use glutin::event_loop::{ControlFlow, EventLoop};
+use glutin::event_loop::EventLoop;
 use glutin::{ContextWrapper, PossiblyCurrent};
 use libmpv::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use std::ffi::c_void;
@@ -17,11 +17,28 @@ enum MPVEvent {
 
 type Display = Rc<ContextWrapper<PossiblyCurrent, glutin::window::Window>>;
 
-fn setup_mpv(event_loop: &EventLoop<MPVEvent>, display: Display) -> (libmpv::Mpv, RenderContext) {
+fn setup_mpv(
+    event_loop: &EventLoop<MPVEvent>,
+    display: Display,
+    opts: Opt,
+) -> (libmpv::Mpv, RenderContext) {
     fn get_proc_address(window: &Display, name: &str) -> *mut c_void {
         window.get_proc_address(name) as *mut _
     }
-    let mut mpv = libmpv::Mpv::new().expect("Failed creating MPV");
+    let mut mpv = libmpv::Mpv::with_initializer(|mpv| {
+        mpv.set_option("osd-align-x", "left")?;
+        mpv.set_option("osd-align-y", "bottom")?;
+        mpv.set_option("osd-margin-x", "5")?;
+        mpv.set_option("osd-margin-y", "5")?;
+        mpv.set_option("osd-border-size", "1")?;
+        mpv.set_option("osd-font-size", "9")?;
+        mpv.set_option(
+            "image-display-duration",
+            opts.period.as_secs_f32().to_string(),
+        )?;
+        Ok(())
+    })
+    .expect("Failed creating MPV");
     let mut render_context = RenderContext::new(
         unsafe { mpv.ctx.as_mut() },
         [
@@ -71,12 +88,7 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
         (Arc::new(gl), Rc::new(window))
     };
 
-    let (mut mpv, render_context) = setup_mpv(&event_loop, window.clone());
-    mpv.set_property::<String>(
-        "image-display-duration",
-        opts.period.as_secs_f32().to_string(),
-    )
-    .unwrap();
+    let (mut mpv, render_context) = setup_mpv(&event_loop, window.clone(), opts);
     mpv.playlist_load_files(&[(
         &first_path.to_str().unwrap(),
         libmpv::FileState::AppendPlay,
@@ -84,28 +96,14 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
     )])
     .unwrap();
 
-    let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl.clone(), None);
-    let mut current_path = String::new();
+    let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl, None);
 
     event_loop.run(move |event, _, ctrl_flow| {
-        *ctrl_flow = ControlFlow::Wait;
+        ctrl_flow.set_wait();
 
         match event {
             Event::RedrawRequested(_) => {
-                egui_glow.run(window.window(), |egui_ctx| {
-                    let path_text_size = 16.0;
-                    egui::Area::new("my_area")
-                        .fixed_pos(egui::pos2(10.0, size.height as f32 - path_text_size - 10.0))
-                        .show(egui_ctx, |ui| {
-                            egui::Frame::none().show(ui, |ui| {
-                                ui.heading(
-                                    egui::RichText::new(&current_path)
-                                        .size(path_text_size)
-                                        .color(egui::Color32::WHITE),
-                                );
-                            });
-                        });
-                });
+                egui_glow.run(window.window(), |_egui_ctx| {});
                 render_context
                     .render::<Display>(0, size.width as _, size.height as _, true)
                     .expect("Failed to draw on glutin window");
@@ -115,7 +113,7 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
             Event::WindowEvent { event, .. } => {
                 match event {
                     WindowEvent::CloseRequested => {
-                        *ctrl_flow = ControlFlow::Exit;
+                        ctrl_flow.set_exit();
                     }
                     WindowEvent::KeyboardInput {
                         input:
@@ -161,22 +159,22 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                         }
                         Some(Ok(libmpv::events::Event::EndFile(_))) => {
                             if mpv.get_property::<String>("playlist-pos").unwrap() == "-1" {
-                                *ctrl_flow = ControlFlow::Exit;
+                                ctrl_flow.set_exit();
                                 break;
                             }
                         }
                         Some(Ok(libmpv::events::Event::FileLoaded)) => {
-                            current_path = mpv.get_property::<String>("path").unwrap();
-                            println!("{}", current_path);
+                            mpv.command("show-text", &["${path}", "2147483647"])
+                                .unwrap();
                         }
                         Some(Ok(_)) => {}
                         Some(Err(err)) => {
                             eprintln!("MPV Error: {}", err);
-                            *ctrl_flow = ControlFlow::Exit;
+                            ctrl_flow.set_exit();
                             break;
                         }
                         None => {
-                            *ctrl_flow = ControlFlow::Wait;
+                            ctrl_flow.set_wait();
                             break;
                         }
                     }
