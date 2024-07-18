@@ -4,6 +4,7 @@ use glutin::event::{Event, WindowEvent};
 use glutin::event_loop::EventLoop;
 use glutin::{ContextWrapper, PossiblyCurrent};
 use libmpv::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
+use libmpv2 as libmpv;
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -89,12 +90,8 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
     };
 
     let (mut mpv, render_context) = setup_mpv(&event_loop, window.clone(), opts);
-    mpv.playlist_load_files(&[(
-        &first_path.to_str().unwrap(),
-        libmpv::FileState::AppendPlay,
-        None,
-    )])
-    .unwrap();
+    mpv.command("loadfile", &[&first_path.to_str().unwrap(), "append-play"])
+        .unwrap();
 
     let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl, None);
 
@@ -125,10 +122,10 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                         ..
                     } => match key {
                         winit::event::VirtualKeyCode::Left => {
-                            let _ = mpv.playlist_previous_weak();
+                            mpv.command("playlist-prev", &[]).ok();
                         }
                         winit::event::VirtualKeyCode::Right => {
-                            let _ = mpv.playlist_next_weak();
+                            mpv.command("playlist-next", &[]).ok();
                         }
                         winit::event::VirtualKeyCode::M => {
                             let mute = mpv.get_property::<String>("mute").unwrap();
@@ -149,12 +146,8 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                     match mpv.event_context_mut().wait_event(0.0) {
                         Some(Ok(libmpv::events::Event::StartFile)) => {
                             if let Some(path) = it.next() {
-                                mpv.playlist_load_files(&[(
-                                    &path.to_str().unwrap(),
-                                    libmpv::FileState::Append,
-                                    None,
-                                )])
-                                .unwrap();
+                                mpv.command("loadfile", &[&path.to_str().unwrap(), "append"])
+                                    .unwrap();
                             }
                         }
                         Some(Ok(libmpv::events::Event::EndFile(_))) => {
