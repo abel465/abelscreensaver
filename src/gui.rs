@@ -1,11 +1,9 @@
 use crate::Opt;
 use egui_glow::egui_winit::winit;
+use egui_glow::glow;
 use glutin::event::{Event, WindowEvent};
-use glutin::event_loop::EventLoop;
-use glutin::{ContextWrapper, PossiblyCurrent};
 use libmpv::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use libmpv2 as libmpv;
-use std::ffi::c_void;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -16,16 +14,13 @@ enum MPVEvent {
     MPVEventUpdate,
 }
 
-type Display = Rc<ContextWrapper<PossiblyCurrent, glutin::window::Window>>;
+type GLContext = Rc<glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>>;
 
 fn setup_mpv(
-    event_loop: &EventLoop<MPVEvent>,
-    display: Display,
+    event_loop: &glutin::event_loop::EventLoop<MPVEvent>,
+    ctx: GLContext,
     opts: Opt,
 ) -> (libmpv::Mpv, RenderContext) {
-    fn get_proc_address(window: &Display, name: &str) -> *mut c_void {
-        window.get_proc_address(name) as *mut _
-    }
     let mut mpv = libmpv::Mpv::with_initializer(|mpv| {
         mpv.set_option("osd-align-x", "left")?;
         mpv.set_option("osd-align-y", "bottom")?;
@@ -45,8 +40,8 @@ fn setup_mpv(
         [
             RenderParam::ApiType(RenderParamApiType::OpenGl),
             RenderParam::InitParams(OpenGLInitParams {
-                get_proc_address,
-                ctx: display,
+                get_proc_address: |ctx: &GLContext, name: &str| ctx.get_proc_address(name) as _,
+                ctx,
             }),
         ],
     )
@@ -85,7 +80,7 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
             .expect("Failed to build glutin window")
             .make_current()
             .expect("Failed to make window current");
-        let gl = glow::Context::from_loader_function(|l| window.get_proc_address(l) as *const _);
+        let gl = glow::Context::from_loader_function(|name| window.get_proc_address(name));
         (Arc::new(gl), Rc::new(window))
     };
 
@@ -102,7 +97,7 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
             Event::RedrawRequested(_) => {
                 egui_glow.run(window.window(), |_egui_ctx| {});
                 render_context
-                    .render::<Display>(0, size.width as _, size.height as _, true)
+                    .render::<GLContext>(0, size.width as _, size.height as _, true)
                     .expect("Failed to draw on glutin window");
                 egui_glow.paint(window.window());
                 window.swap_buffers().unwrap();
