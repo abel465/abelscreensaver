@@ -68,6 +68,17 @@ impl ScreenSaver {
         self.overlay.show(overlay_type, &self.mpv);
     }
 
+    pub fn toggle_pause(&mut self) {
+        let pause = self.mpv.get_property::<String>("pause").unwrap();
+        let (pause, overlay_type) = if pause == "yes" {
+            ("no", OverlayType::PauseOff)
+        } else {
+            ("yes", OverlayType::PauseOn)
+        };
+        self.mpv.set_property("pause", pause).unwrap();
+        self.overlay.show(overlay_type, &self.mpv);
+    }
+
     pub fn maybe_clear_overlay(&self) {
         self.overlay.maybe_clear(&self.mpv);
     }
@@ -114,11 +125,15 @@ fn create_bgra(file_path: &str, temp_dir: &str, window_size: PhysicalSize<u32>) 
 enum OverlayType {
     SoundOn,
     SoundOff,
+    PauseOn,
+    PauseOff,
 }
 
 struct Overlay {
     sound_on: BgraImage,
     sound_off: BgraImage,
+    pause_on: BgraImage,
+    pause_off: BgraImage,
     last_render_instant: Instant,
     event_proxy: EventLoopProxy<UserEvent>,
     window_size: PhysicalSize<u32>,
@@ -136,6 +151,8 @@ impl Overlay {
         Overlay {
             sound_on: create_bgra("assets/svg/sound-on.svg", temp_dir, window_size),
             sound_off: create_bgra("assets/svg/sound-off.svg", temp_dir, window_size),
+            pause_on: create_bgra("assets/svg/pause.svg", temp_dir, window_size),
+            pause_off: create_bgra("assets/svg/play.svg", temp_dir, window_size),
             last_render_instant: Instant::now() - Self::DURATION,
             event_proxy,
             window_size,
@@ -149,6 +166,8 @@ impl Overlay {
         } = match overlay_type {
             OverlayType::SoundOff => &self.sound_off,
             OverlayType::SoundOn => &self.sound_on,
+            OverlayType::PauseOff => &self.pause_off,
+            OverlayType::PauseOn => &self.pause_on,
         };
         self.last_render_instant = Instant::now();
         mpv.command(

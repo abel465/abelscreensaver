@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="26" height="24" color="#000000" fill="none" stroke-width="1.5" data-darkreader-inline-color="" version="1.1" viewBox="0 0 26 24" xmlns="http://www.w3.org/2000/svg">
+ <defs>
+  <filter id="filter3" x="-.3675" y="-.105" width="1.735" height="1.21" color-interpolation-filters="sRGB">
+   <feFlood flood-color="rgb(0,0,0)" in="SourceGraphic" result="flood"/>
+   <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="0.300000"/>
+   <feOffset dx="0.000000" dy="0.000000" in="blur" result="offset"/>
+   <feComposite in="flood" in2="offset" operator="in" result="comp1"/>
+   <feComposite in="SourceGraphic" in2="comp1" result="comp2"/>
+  </filter>
+  <filter id="filter5" x="-.3675" y="-.105" width="1.735" height="1.21" color-interpolation-filters="sRGB">
+   <feFlood flood-color="rgb(0,0,0)" in="SourceGraphic" result="flood"/>
+   <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="0.300000"/>
+   <feOffset dx="0.000000" dy="0.000000" in="blur" result="offset"/>
+   <feComposite in="flood" in2="offset" operator="in" result="comp1"/>
+   <feComposite in="SourceGraphic" in2="comp1" result="comp2"/>
+  </filter>
+ </defs>
+ <path d="m6 18.4v-12.8c0-0.33137 0.26863-0.6 0.6-0.6h2.8c0.33137 0 0.6 0.26863 0.6 0.6v12.8c0 0.3314-0.26863 0.6-0.6 0.6h-2.8c-0.33137 0-0.6-0.2686-0.6-0.6z" filter="url(#filter5)" stroke="#fff" stroke-width="1.5" data-darkreader-inline-stroke=""/>
+ <path d="m14 18.4v-12.8c0-0.33137 0.2686-0.6 0.6-0.6h2.8c0.3314 0 0.6 0.26863 0.6 0.6v12.8c0 0.3314-0.2686 0.6-0.6 0.6h-2.8c-0.3314 0-0.6-0.2686-0.6-0.6z" filter="url(#filter3)" stroke="#fff" stroke-width="1.5" data-darkreader-inline-stroke=""/>
+</svg>

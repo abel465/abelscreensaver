@@ -127,6 +127,9 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                         winit::event::VirtualKeyCode::M => {
                             app.toggle_mute();
                         }
+                        winit::event::VirtualKeyCode::Space => {
+                            app.toggle_pause();
+                        }
                         _ => {}
                     },
                     _ => {}
