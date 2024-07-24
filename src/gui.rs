@@ -1,14 +1,16 @@
 use crate::screensaver::ScreenSaver;
-use crate::Opt;
+use crate::Options;
 use egui_glow::egui_winit::winit;
 use egui_glow::glow;
 use glutin::event::{Event, WindowEvent};
 use libmpv::events::Event as MPVEvent;
 use libmpv::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
+use libmpv::Mpv;
 use libmpv2 as libmpv;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use winit::event::VirtualKeyCode;
 
 #[derive(Debug)]
 pub enum UserEvent {
@@ -22,9 +24,9 @@ type GLContext = Rc<glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::wind
 fn setup_mpv(
     event_loop: &glutin::event_loop::EventLoop<UserEvent>,
     ctx: GLContext,
-    opts: Opt,
-) -> (libmpv::Mpv, RenderContext) {
-    let mut mpv = libmpv::Mpv::with_initializer(|mpv| {
+    opts: &Options,
+) -> (Mpv, RenderContext) {
+    let mut mpv = Mpv::with_initializer(|mpv| {
         mpv.set_option("osd-align-x", "left")?;
         mpv.set_option("osd-align-y", "bottom")?;
         mpv.set_option("osd-margin-x", "5")?;
@@ -63,7 +65,7 @@ fn setup_mpv(
     (mpv, render_context)
 }
 
-pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
+pub fn run<I: Iterator<Item = PathBuf> + 'static>(mut opts: Options, mut it: I) {
     let Some(first_path) = it.next() else {
         return;
     };
@@ -87,8 +89,8 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
         (Arc::new(gl), Rc::new(window))
     };
 
-    let (mpv, render_context) = setup_mpv(&event_loop, window.clone(), opts);
-    let mut app = ScreenSaver::new(mpv, size, event_loop.create_proxy());
+    let (mpv, render_context) = setup_mpv(&event_loop, window.clone(), &opts);
+    let mut app = ScreenSaver::new(mpv, size, event_loop.create_proxy(), opts);
     app.playlist_append_play(&first_path);
     let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl, None);
 
@@ -118,18 +120,11 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                             },
                         ..
                     } => match key {
-                        winit::event::VirtualKeyCode::Left => {
-                            app.playlist_prev();
-                        }
-                        winit::event::VirtualKeyCode::Right => {
-                            app.playlist_next();
-                        }
-                        winit::event::VirtualKeyCode::M => {
-                            app.toggle_mute();
-                        }
-                        winit::event::VirtualKeyCode::Space => {
-                            app.toggle_pause();
-                        }
+                        VirtualKeyCode::Left => app.playlist_prev(),
+                        VirtualKeyCode::Right => app.playlist_next(),
+                        VirtualKeyCode::M => app.toggle_mute(),
+                        VirtualKeyCode::Space => app.toggle_pause(),
+                        VirtualKeyCode::L => app.toggle_path_label(),
                         _ => {}
                     },
                     _ => {}
@@ -155,7 +150,7 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                             }
                         }
                         Some(Ok(MPVEvent::FileLoaded)) => {
-                            app.show_path();
+                            app.maybe_show_path();
                         }
                         Some(Ok(_)) => {}
                         Some(Err(err)) => {

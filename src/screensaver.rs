@@ -1,6 +1,8 @@
 use crate::gui::UserEvent;
+use crate::Options;
 use egui_glow::egui_winit::winit;
 use libmpv::events::Event as MPVEvent;
+use libmpv::Mpv;
 use libmpv2 as libmpv;
 use resvg::{tiny_skia, usvg};
 use std::path::Path;
@@ -9,18 +11,20 @@ use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoopProxy;
 
 pub struct ScreenSaver {
-    mpv: libmpv::Mpv,
+    mpv: Mpv,
     overlay: Overlay,
+    opts: Options,
 }
 
 impl ScreenSaver {
     pub fn new(
-        mpv: libmpv::Mpv,
+        mpv: Mpv,
         window_size: PhysicalSize<u32>,
         event_proxy: EventLoopProxy<UserEvent>,
+        opts: Options,
     ) -> Self {
         let overlay = Overlay::new(window_size, event_proxy);
-        ScreenSaver { mpv, overlay }
+        ScreenSaver { mpv, overlay, opts }
     }
 
     pub fn playlist_prev(&self) {
@@ -43,9 +47,14 @@ impl ScreenSaver {
             .unwrap();
     }
 
-    pub fn show_path(&self) {
+    pub fn maybe_show_path(&self) {
+        let duration = if self.opts.path_label {
+            "2147483647"
+        } else {
+            "0"
+        };
         self.mpv
-            .command("show-text", &["${path}", "2147483647"])
+            .command("show-text", &["${path}", duration])
             .unwrap();
     }
 
@@ -55,6 +64,11 @@ impl ScreenSaver {
 
     pub fn next_event(&mut self) -> Option<libmpv::Result<MPVEvent>> {
         self.mpv.event_context_mut().wait_event(0.0)
+    }
+
+    pub fn toggle_path_label(&mut self) {
+        self.opts.path_label = !self.opts.path_label;
+        self.maybe_show_path();
     }
 
     pub fn toggle_mute(&mut self) {
@@ -159,7 +173,7 @@ impl Overlay {
         }
     }
 
-    fn show(&mut self, overlay_type: OverlayType, mpv: &libmpv::Mpv) {
+    fn show(&mut self, overlay_type: OverlayType, mpv: &Mpv) {
         let BgraImage {
             path,
             size: PhysicalSize { width, height },
@@ -192,7 +206,7 @@ impl Overlay {
         });
     }
 
-    fn maybe_clear(&self, mpv: &libmpv::Mpv) {
+    fn maybe_clear(&self, mpv: &Mpv) {
         if self.last_render_instant.elapsed() >= Self::DURATION {
             mpv.command("overlay-remove", &["0"]).unwrap();
         }

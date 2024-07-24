@@ -1,4 +1,4 @@
-use crate::Opt;
+use crate::Options;
 use auto_enums::auto_enum;
 use mime_guess::mime;
 use rand::{rngs::ThreadRng, thread_rng, Rng};
@@ -60,7 +60,7 @@ pub struct RandomMediaIterator {
 }
 
 impl RandomMediaIterator {
-    pub fn new(opts: Opt) -> Self {
+    pub fn new(opts: Options) -> Self {
         let (tx, rx) = channel();
         let data = Arc::new(Mutex::new(RandomMediaData::new()));
         let data_copy = data.clone();
@@ -108,7 +108,7 @@ impl std::iter::Iterator for RandomMediaIterator {
     }
 }
 
-fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Opt, tx: Sender<Message>) {
+fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Options, tx: Sender<Message>) {
     let mut dirs = VecDeque::from(opts.paths);
 
     while let Some(dir) = dirs.pop_front() {
@@ -151,7 +151,7 @@ fn is_hidden(str: &OsStr) -> bool {
     str.to_str().map_or(true, |s| s.starts_with('.'))
 }
 
-pub fn unspecified_media_iterator(opts: Opt) -> impl Iterator<Item = PathBuf> {
+pub fn unspecified_media_iterator(opts: Options) -> impl Iterator<Item = PathBuf> {
     opts.paths.into_iter().flat_map(move |dir| {
         WalkDir::new(dir)
             .into_iter()
@@ -162,12 +162,12 @@ pub fn unspecified_media_iterator(opts: Opt) -> impl Iterator<Item = PathBuf> {
     })
 }
 
-pub fn random_media_iterator(opts: Opt) -> RandomMediaIterator {
+pub fn random_media_iterator(opts: Options) -> RandomMediaIterator {
     RandomMediaIterator::new(opts)
 }
 
 #[auto_enum(Iterator)]
-pub fn media_iterator(opts: Opt) -> impl Iterator<Item = PathBuf> {
+pub fn media_iterator(opts: Options) -> impl Iterator<Item = PathBuf> {
     if opts.random {
         random_media_iterator(opts)
     } else {

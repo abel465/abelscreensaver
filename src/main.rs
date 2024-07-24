@@ -16,7 +16,7 @@ fn parse_millis(src: &str) -> Result<Duration, ParseIntError> {
 
 #[derive(Debug, StructOpt, Clone)]
 #[structopt(name = "abelscreensaver", about = "A capable screensaver.")]
-pub struct Opt {
+pub struct Options {
     /// Randomize playback
     #[structopt(long)]
     random: bool,
@@ -24,6 +24,10 @@ pub struct Opt {
     /// Include hidden entries
     #[structopt(short, long)]
     pub all: bool,
+
+    /// Show path label
+    #[structopt(short, long)]
+    pub path_label: bool,
 
     /// Length of time (ms) for each image
     #[structopt(short, long, default_value = "4000", parse(try_from_str=parse_millis))]
@@ -33,7 +37,7 @@ pub struct Opt {
 }
 
 fn main() {
-    let mut opts = Opt::from_args();
+    let mut opts = Options::from_args();
     if opts.paths.is_empty() {
         opts.paths.push(current_dir().unwrap());
     };
