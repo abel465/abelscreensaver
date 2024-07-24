@@ -2,6 +2,7 @@ use crate::Opt;
 use egui_glow::egui_winit::winit;
 use egui_glow::glow;
 use glutin::event::{Event, WindowEvent};
+use libmpv::events::Event as MPVEvent;
 use libmpv::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use libmpv2 as libmpv;
 use resvg::{tiny_skia, usvg};
@@ -12,16 +13,16 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[derive(Debug)]
-enum MPVEvent {
-    MPVRenderUpdate,
-    MPVEventUpdate,
-    MPVClearOverlay,
+enum UserEvent {
+    RequestRedraw,
+    MPVEvents,
+    ClearOverlay,
 }
 
 type GLContext = Rc<glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>>;
 
 fn setup_mpv(
-    event_loop: &glutin::event_loop::EventLoop<MPVEvent>,
+    event_loop: &glutin::event_loop::EventLoop<UserEvent>,
     ctx: GLContext,
     opts: Opt,
 ) -> (libmpv::Mpv, RenderContext) {
@@ -53,11 +54,11 @@ fn setup_mpv(
 
     let event_proxy = event_loop.create_proxy();
     mpv.event_context_mut().set_wakeup_callback(move || {
-        event_proxy.send_event(MPVEvent::MPVEventUpdate).unwrap();
+        event_proxy.send_event(UserEvent::MPVEvents).unwrap();
     });
     let event_proxy = event_loop.create_proxy();
     render_context.set_update_callback(move || {
-        event_proxy.send_event(MPVEvent::MPVRenderUpdate).unwrap();
+        event_proxy.send_event(UserEvent::RequestRedraw).unwrap();
     });
     mpv.event_context_mut().disable_deprecated_events().unwrap();
 
@@ -154,7 +155,7 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
     let Some(first_path) = it.next() else {
         return;
     };
-    let event_loop = glutin::event_loop::EventLoopBuilder::<MPVEvent>::with_user_event().build();
+    let event_loop = glutin::event_loop::EventLoopBuilder::<UserEvent>::with_user_event().build();
     let size = event_loop
         .primary_monitor()
         .or(event_loop.available_monitors().next())
@@ -240,7 +241,7 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                             let event_proxy = event_proxy.clone();
                             std::thread::spawn(move || {
                                 std::thread::sleep(Overlay::DURATION);
-                                event_proxy.send_event(MPVEvent::MPVClearOverlay).unwrap();
+                                event_proxy.send_event(UserEvent::ClearOverlay).unwrap();
                             });
                         }
                         _ => {}
@@ -252,27 +253,27 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                 }
             }
             Event::UserEvent(event) => match event {
-                MPVEvent::MPVClearOverlay => {
+                UserEvent::ClearOverlay => {
                     if overlay.should_clear() {
                         mpv.command("overlay-remove", &["0"]).unwrap();
                     }
                 }
-                MPVEvent::MPVRenderUpdate => window.window().request_redraw(),
-                MPVEvent::MPVEventUpdate => loop {
+                UserEvent::RequestRedraw => window.window().request_redraw(),
+                UserEvent::MPVEvents => loop {
                     match mpv.event_context_mut().wait_event(0.0) {
-                        Some(Ok(libmpv::events::Event::StartFile)) => {
+                        Some(Ok(MPVEvent::StartFile)) => {
                             if let Some(path) = it.next() {
                                 mpv.command("loadfile", &[&path.to_str().unwrap(), "append"])
                                     .unwrap();
                             }
                         }
-                        Some(Ok(libmpv::events::Event::EndFile(_))) => {
+                        Some(Ok(MPVEvent::EndFile(_))) => {
                             if mpv.get_property::<String>("playlist-pos").unwrap() == "-1" {
                                 ctrl_flow.set_exit();
                                 break;
                             }
                         }
-                        Some(Ok(libmpv::events::Event::FileLoaded)) => {
+                        Some(Ok(MPVEvent::FileLoaded)) => {
                             mpv.command("show-text", &["${path}", "2147483647"])
                                 .unwrap();
                         }
