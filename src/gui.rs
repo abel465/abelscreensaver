@@ -1,3 +1,4 @@
+use crate::screensaver::ScreenSaver;
 use crate::Opt;
 use egui_glow::egui_winit::winit;
 use egui_glow::glow;
@@ -5,15 +6,12 @@ use glutin::event::{Event, WindowEvent};
 use libmpv::events::Event as MPVEvent;
 use libmpv::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use libmpv2 as libmpv;
-use resvg::{tiny_skia, usvg};
-use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 #[derive(Debug)]
-enum UserEvent {
+pub enum UserEvent {
     RequestRedraw,
     MPVEvents,
     ClearOverlay,
@@ -65,93 +63,7 @@ fn setup_mpv(
     (mpv, render_context)
 }
 
-struct BgraImage {
-    path: String,
-    width: u32,
-    height: u32,
-}
-
-fn create_bgra(
-    file_path: &str,
-    temp_dir: &str,
-    window_size: winit::dpi::PhysicalSize<u32>,
-) -> BgraImage {
-    let path = std::path::Path::new(file_path);
-    let tree = usvg::Tree::from_str(
-        &std::fs::read_to_string(file_path).unwrap(),
-        &usvg::Options::default(),
-    )
-    .unwrap();
-    let width = (window_size.width.min(window_size.height) as f32 * 0.1) as u32;
-    let size = tree.size();
-    let scale = width as f32 / size.width();
-    let height = (size.height() * scale) as u32;
-    let mut pixmap = tiny_skia::Pixmap::new(width, height).unwrap();
-    resvg::render(
-        &tree,
-        tiny_skia::Transform::from_scale(scale, scale),
-        &mut pixmap.as_mut(),
-    );
-    let mut data = Vec::with_capacity((width * height * 4) as usize);
-    for p in pixmap.pixels() {
-        data.push(p.blue());
-        data.push(p.green());
-        data.push(p.red());
-        data.push(p.alpha());
-    }
-    let file_name = path.file_name().unwrap().to_str().unwrap();
-    let path = format!("{temp_dir}{file_name}");
-    std::fs::write(&path, &data).expect("Unable to write file");
-    BgraImage {
-        path,
-        width,
-        height,
-    }
-}
-
-struct Overlay {
-    sound_on: BgraImage,
-    sound_off: BgraImage,
-    last_render_instant: Instant,
-}
-
-impl Overlay {
-    const DURATION: Duration = Duration::from_secs(1);
-
-    fn new(window_size: winit::dpi::PhysicalSize<u32>) -> Self {
-        let mut temp_dir = std::env::temp_dir();
-        temp_dir.push("abelscreensaver/");
-        std::fs::create_dir(&temp_dir)
-            .or_else(|e| {
-                if e.kind() == ErrorKind::AlreadyExists {
-                    Ok(())
-                } else {
-                    Err(e)
-                }
-            })
-            .unwrap();
-        let temp_dir = temp_dir.to_str().unwrap();
-
-        let sound_on = create_bgra("assets/svg/sound-on.svg", temp_dir, window_size);
-        let sound_off = create_bgra("assets/svg/sound-off.svg", temp_dir, window_size);
-
-        Overlay {
-            sound_on,
-            sound_off,
-            last_render_instant: Instant::now() - Self::DURATION,
-        }
-    }
-
-    fn set_instant(&mut self) {
-        self.last_render_instant = Instant::now();
-    }
-
-    fn should_clear(&self) -> bool {
-        self.last_render_instant.elapsed() >= Self::DURATION
-    }
-}
-
-pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
+pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
     let Some(first_path) = it.next() else {
         return;
     };
@@ -175,12 +87,10 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
         (Arc::new(gl), Rc::new(window))
     };
 
-    let mut overlay = Overlay::new(size);
-    let (mut mpv, render_context) = setup_mpv(&event_loop, window.clone(), opts);
-    mpv.command("loadfile", &[&first_path.to_str().unwrap(), "append-play"])
-        .unwrap();
+    let (mpv, render_context) = setup_mpv(&event_loop, window.clone(), opts);
+    let mut app = ScreenSaver::new(mpv, size, event_loop.create_proxy());
+    app.playlist_append_play(&first_path);
     let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl, None);
-    let event_proxy = event_loop.create_proxy();
 
     event_loop.run(move |event, _, ctrl_flow| {
         ctrl_flow.set_wait();
@@ -209,40 +119,13 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                         ..
                     } => match key {
                         winit::event::VirtualKeyCode::Left => {
-                            mpv.command("playlist-prev", &[]).ok();
+                            app.playlist_prev();
                         }
                         winit::event::VirtualKeyCode::Right => {
-                            mpv.command("playlist-next", &[]).ok();
+                            app.playlist_next();
                         }
                         winit::event::VirtualKeyCode::M => {
-                            let mute = mpv.get_property::<String>("mute").unwrap();
-                            let (new_mute, image) = if mute == "yes" {
-                                ("no", &overlay.sound_on)
-                            } else {
-                                ("yes", &overlay.sound_off)
-                            };
-                            mpv.set_property("mute", new_mute).unwrap();
-                            mpv.command(
-                                "overlay-add",
-                                &[
-                                    "0",
-                                    &((size.width - image.width) / 2).to_string(),
-                                    &((size.height - image.height) / 2).to_string(),
-                                    &image.path,
-                                    "0",
-                                    "bgra",
-                                    &image.width.to_string(),
-                                    &image.height.to_string(),
-                                    &(image.width * 4).to_string(),
-                                ],
-                            )
-                            .unwrap();
-                            overlay.set_instant();
-                            let event_proxy = event_proxy.clone();
-                            std::thread::spawn(move || {
-                                std::thread::sleep(Overlay::DURATION);
-                                event_proxy.send_event(UserEvent::ClearOverlay).unwrap();
-                            });
+                            app.toggle_mute();
                         }
                         _ => {}
                     },
@@ -253,29 +136,23 @@ pub fn main_stuff<I: Iterator<Item = PathBuf> + 'static>(opts: Opt, mut it: I) {
                 }
             }
             Event::UserEvent(event) => match event {
-                UserEvent::ClearOverlay => {
-                    if overlay.should_clear() {
-                        mpv.command("overlay-remove", &["0"]).unwrap();
-                    }
-                }
+                UserEvent::ClearOverlay => app.maybe_clear_overlay(),
                 UserEvent::RequestRedraw => window.window().request_redraw(),
                 UserEvent::MPVEvents => loop {
-                    match mpv.event_context_mut().wait_event(0.0) {
+                    match app.next_event() {
                         Some(Ok(MPVEvent::StartFile)) => {
                             if let Some(path) = it.next() {
-                                mpv.command("loadfile", &[&path.to_str().unwrap(), "append"])
-                                    .unwrap();
+                                app.playlist_append(&path);
                             }
                         }
                         Some(Ok(MPVEvent::EndFile(_))) => {
-                            if mpv.get_property::<String>("playlist-pos").unwrap() == "-1" {
+                            if app.finished() {
                                 ctrl_flow.set_exit();
                                 break;
                             }
                         }
                         Some(Ok(MPVEvent::FileLoaded)) => {
-                            mpv.command("show-text", &["${path}", "2147483647"])
-                                .unwrap();
+                            app.show_path();
                         }
                         Some(Ok(_)) => {}
                         Some(Err(err)) => {

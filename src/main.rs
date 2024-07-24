@@ -1,5 +1,6 @@
 mod gui;
 mod media_iterator;
+mod screensaver;
 
 use media_iterator::media_iterator;
 use std::env::current_dir;
@@ -25,7 +26,7 @@ pub struct Opt {
     pub all: bool,
 
     /// Length of time (ms) for each image
-    #[structopt(short, long, default_value = "2000", parse(try_from_str=parse_millis))]
+    #[structopt(short, long, default_value = "4000", parse(try_from_str=parse_millis))]
     pub period: Duration,
 
     pub paths: Vec<PathBuf>,
@@ -37,5 +38,5 @@ fn main() {
         opts.paths.push(current_dir().unwrap());
     };
     let it = media_iterator(opts.clone());
-    gui::main_stuff(opts, it);
+    gui::run(opts, it);
 }
