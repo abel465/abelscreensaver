@@ -14,3 +14,4 @@ structopt = "0.3.26"
 walkdir = "2.5.0"
 libmpv2 = { version = "4.0.0", default-features = false, features = ["render"] }
 ffprobe = "0.4.0"
+resvg = "0.42.0"

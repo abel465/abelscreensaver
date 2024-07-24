@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="26" height="20" color="#000000" fill="none" stroke-width="1.5" data-darkreader-inline-color="" version="1.1" viewBox="0 0 26 20" xmlns="http://www.w3.org/2000/svg">
+ <defs>
+  <filter id="filter3" x="-.3675" y="-.3675" width="1.735" height="1.735" color-interpolation-filters="sRGB">
+   <feFlood flood-color="rgb(0,0,0)" in="SourceGraphic" result="flood"/>
+   <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="0.300000"/>
+   <feOffset dx="0.000000" dy="0.000000" in="blur" result="offset"/>
+   <feComposite in="flood" in2="offset" operator="in" result="comp1"/>
+   <feComposite in="SourceGraphic" in2="comp1" result="comp2"/>
+  </filter>
+  <filter id="filter5" x="-.11308" y="-.089349" width="1.2262" height="1.1787" color-interpolation-filters="sRGB">
+   <feFlood flood-color="rgb(0,0,0)" in="SourceGraphic" result="flood"/>
+   <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="0.300000"/>
+   <feOffset dx="0.000000" dy="0.000000" in="blur" result="offset"/>
+   <feComposite in="flood" in2="offset" operator="in" result="comp1"/>
+   <feComposite in="SourceGraphic" in2="comp1" result="comp2"/>
+  </filter>
+ </defs>
+ <path d="m18 12 2.0005-2m1.9995-2-1.9995 2m0 0-2.0005-2m2.0005 2 1.9995 2" filter="url(#filter3)" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" data-darkreader-inline-stroke=""/>
+ <path d="m2 11.857v-3.7142c0-1.1046 0.89543-2 2-2h2.9c0.19569 0 0.38708-0.05742 0.55046-0.16514l5.999-3.9554c0.6649-0.43838 1.5505 0.03847 1.5505 0.83486v14.286c0 0.7963-0.8856 1.2732-1.5505 0.8348l-5.999-3.9554c-0.16338-0.1077-0.35477-0.1652-0.55046-0.1652h-2.9c-1.1046 0-2-0.8954-2-2z" filter="url(#filter5)" stroke="#fff" stroke-width="1.5" data-darkreader-inline-stroke=""/>
+</svg>
