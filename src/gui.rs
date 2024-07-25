@@ -37,6 +37,9 @@ fn setup_mpv(
             "image-display-duration",
             opts.period.as_secs_f32().to_string(),
         )?;
+        if opts.mute {
+            mpv.set_option("mute", "yes").unwrap();
+        }
         Ok(())
     })
     .expect("Failed creating MPV");
@@ -65,7 +68,7 @@ fn setup_mpv(
     (mpv, render_context)
 }
 
-pub fn run<I: Iterator<Item = PathBuf> + 'static>(mut opts: Options, mut it: I) {
+pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
     let Some(first_path) = it.next() else {
         return;
     };

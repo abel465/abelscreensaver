@@ -29,6 +29,10 @@ pub struct Options {
     #[structopt(short, long)]
     pub path_label: bool,
 
+    /// Mute audio
+    #[structopt(short, long)]
+    pub mute: bool,
+
     /// Length of time (ms) for each image
     #[structopt(short, long, default_value = "4000", parse(try_from_str=parse_millis))]
     pub period: Duration,
