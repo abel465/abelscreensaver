@@ -87,7 +87,6 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
 
     let (mpv, render_context) = setup_mpv(&event_loop, window.clone(), &opts);
     let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl, None);
-    let event_proxy = event_loop.create_proxy();
 
     let app = MpvClient::new(mpv);
     app.playlist_append_play(&first_path);
@@ -104,6 +103,9 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
                 egui_glow.run(window.window(), |egui_ctx| {
                     overlay.ui(egui_ctx);
                 });
+                if overlay.needs_repaint() {
+                    window.window().request_redraw();
+                }
                 egui_glow.paint(window.window());
                 window.swap_buffers().unwrap();
             }
@@ -128,8 +130,8 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
                         } => match key {
                             VirtualKeyCode::Left => overlay.app.playlist_prev(),
                             VirtualKeyCode::Right => overlay.app.playlist_next(),
-                            VirtualKeyCode::M => overlay.toggle_mute(event_proxy.clone()),
-                            VirtualKeyCode::Space => overlay.toggle_pause(event_proxy.clone()),
+                            VirtualKeyCode::M => overlay.toggle_mute(),
+                            VirtualKeyCode::Space => overlay.toggle_pause(),
                             _ => {}
                         },
                         _ => {}
@@ -141,7 +143,7 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
                 ..
             } => {
                 window.window().request_redraw();
-                overlay.set_ui_repaint_timer(event_proxy.clone());
+                overlay.reset_ui_render_instant();
             }
             Event::UserEvent(event) => match event {
                 UserEvent::RequestRedraw => window.window().request_redraw(),

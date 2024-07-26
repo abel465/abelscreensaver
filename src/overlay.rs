@@ -1,9 +1,7 @@
 use crate::mpvclient::MpvClient;
-use crate::runner::UserEvent;
 use crate::Options;
 use egui_extras::RetainedImage;
 use glutin::dpi::PhysicalSize;
-use glutin::event_loop::EventLoopProxy;
 use std::time::{Duration, Instant};
 
 struct ImageToggleButton {
@@ -54,6 +52,7 @@ pub struct Overlay {
 impl Overlay {
     const UI_DURATION: Duration = Duration::from_millis(500);
     const CENTER_IMAGE_DURATION: Duration = Duration::from_millis(1000);
+    const CURSOR_HIDE_DURATION: Duration = Duration::from_millis(1000);
 
     pub fn new(app: MpvClient, size: PhysicalSize<u32>, opts: &Options) -> Self {
         let mute_toggle_button = ImageToggleButton::new(
@@ -120,7 +119,7 @@ impl Overlay {
                 .to_pos2(),
             center_image_index: 0,
             center_images,
-            last_ui_render_instant: Instant::now() - Self::UI_DURATION,
+            last_ui_render_instant: Instant::now() - Self::CURSOR_HIDE_DURATION,
             last_center_render_instant: Instant::now() - Self::CENTER_IMAGE_DURATION,
             mute_toggle_button,
             pause_toggle_button,
@@ -155,6 +154,8 @@ impl Overlay {
             {
                 self.last_ui_render_instant = Instant::now();
             };
+        } else if self.last_ui_render_instant.elapsed() > Self::CURSOR_HIDE_DURATION {
+            ctx.output().cursor_icon = egui::CursorIcon::None;
         }
         if self.last_center_render_instant.elapsed() <= Self::CENTER_IMAGE_DURATION {
             egui::Area::new("center_area")
@@ -167,7 +168,7 @@ impl Overlay {
         }
     }
 
-    pub fn toggle_mute(&mut self, event_proxy: EventLoopProxy<UserEvent>) {
+    pub fn toggle_mute(&mut self) {
         let mute = self.mute_toggle_button.toggle();
         self.app.set_mute(mute);
         self.center_image_index = if mute {
@@ -175,10 +176,10 @@ impl Overlay {
         } else {
             ImageVariants::UnMute
         } as usize;
-        self.set_overlay_repaint_timer(event_proxy)
+        self.last_center_render_instant = Instant::now();
     }
 
-    pub fn toggle_pause(&mut self, event_proxy: EventLoopProxy<UserEvent>) {
+    pub fn toggle_pause(&mut self) {
         let pause = self.pause_toggle_button.toggle();
         self.app.set_pause(pause);
         self.center_image_index = if pause {
@@ -186,23 +187,16 @@ impl Overlay {
         } else {
             ImageVariants::Play
         } as usize;
-        self.set_overlay_repaint_timer(event_proxy)
-    }
-
-    fn set_overlay_repaint_timer(&mut self, event_proxy: EventLoopProxy<UserEvent>) {
         self.last_center_render_instant = Instant::now();
-        std::thread::spawn(move || {
-            std::thread::sleep(Self::CENTER_IMAGE_DURATION);
-            event_proxy.send_event(UserEvent::RequestRedraw).unwrap();
-        });
     }
 
-    pub fn set_ui_repaint_timer(&mut self, event_proxy: EventLoopProxy<UserEvent>) {
+    pub fn reset_ui_render_instant(&mut self) {
         self.last_ui_render_instant = Instant::now();
-        std::thread::spawn(move || {
-            std::thread::sleep(Self::UI_DURATION);
-            event_proxy.send_event(UserEvent::RequestRedraw).unwrap();
-        });
+    }
+
+    pub fn needs_repaint(&self) -> bool {
+        self.last_ui_render_instant.elapsed() < Self::CURSOR_HIDE_DURATION
+            || self.last_center_render_instant.elapsed() < Self::CENTER_IMAGE_DURATION
     }
 
     pub fn set_path(&mut self) {
