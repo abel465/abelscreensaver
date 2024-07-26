@@ -1,6 +1,7 @@
-mod gui;
 mod media_iterator;
-mod screensaver;
+mod mpvclient;
+mod overlay;
+mod runner;
 
 use media_iterator::media_iterator;
 use std::env::current_dir;
@@ -25,10 +26,6 @@ pub struct Options {
     #[structopt(short, long)]
     pub all: bool,
 
-    /// Show path label
-    #[structopt(short, long)]
-    pub path_label: bool,
-
     /// Mute audio
     #[structopt(short, long)]
     pub mute: bool,
@@ -46,5 +43,5 @@ fn main() {
         opts.paths.push(current_dir().unwrap());
     };
     let it = media_iterator(opts.clone());
-    gui::run(opts, it);
+    runner::run(opts, it);
 }

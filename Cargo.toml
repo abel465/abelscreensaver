@@ -7,6 +7,10 @@ edition = "2021"
 auto_enums = "0.8.5"
 bisection = "0.1.0"
 egui_glow = { version = "0.20", features = ["winit"] }
+egui = { version = "0.20", default-features = false, features = [
+  "default_fonts",
+] }
+egui_extras = { version = "0.20", default-features = false, features = ["svg"] }
 glutin = "0.29"
 mime_guess = "2.0.4"
 rand = "0.8.5"
@@ -14,4 +18,3 @@ structopt = "0.3.26"
 walkdir = "2.5.0"
 libmpv2 = { version = "4.0.0", default-features = false, features = ["render"] }
 ffprobe = "0.4.0"
-resvg = "0.42.0"

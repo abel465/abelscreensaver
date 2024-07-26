@@ -1,38 +1,31 @@
-use crate::screensaver::ScreenSaver;
+use crate::mpvclient::MpvClient;
+use crate::overlay::Overlay;
 use crate::Options;
-use egui_glow::egui_winit::winit;
-use egui_glow::glow;
-use glutin::event::{Event, WindowEvent};
+use egui_glow::egui_winit::winit::event::{ElementState, KeyboardInput, VirtualKeyCode};
+use egui_glow::{glow, EventResponse};
+use glutin::event::{DeviceEvent, Event, WindowEvent};
+use glutin::event_loop::{EventLoop, EventLoopBuilder};
 use libmpv::events::Event as MPVEvent;
 use libmpv::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
-use libmpv::Mpv;
 use libmpv2 as libmpv;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use winit::event::VirtualKeyCode;
 
 #[derive(Debug)]
 pub enum UserEvent {
     RequestRedraw,
     MPVEvents,
-    ClearOverlay,
 }
 
 type GLContext = Rc<glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>>;
 
 fn setup_mpv(
-    event_loop: &glutin::event_loop::EventLoop<UserEvent>,
+    event_loop: &EventLoop<UserEvent>,
     ctx: GLContext,
     opts: &Options,
-) -> (Mpv, RenderContext) {
-    let mut mpv = Mpv::with_initializer(|mpv| {
-        mpv.set_option("osd-align-x", "left")?;
-        mpv.set_option("osd-align-y", "bottom")?;
-        mpv.set_option("osd-margin-x", "5")?;
-        mpv.set_option("osd-margin-y", "5")?;
-        mpv.set_option("osd-border-size", "1")?;
-        mpv.set_option("osd-font-size", "9")?;
+) -> (libmpv::Mpv, RenderContext) {
+    let mut mpv = libmpv::Mpv::with_initializer(|mpv| {
         mpv.set_option(
             "image-display-duration",
             opts.period.as_secs_f32().to_string(),
@@ -72,7 +65,7 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
     let Some(first_path) = it.next() else {
         return;
     };
-    let event_loop = glutin::event_loop::EventLoopBuilder::<UserEvent>::with_user_event().build();
+    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let size = event_loop
         .primary_monitor()
         .or(event_loop.available_monitors().next())
@@ -93,67 +86,80 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
     };
 
     let (mpv, render_context) = setup_mpv(&event_loop, window.clone(), &opts);
-    let mut app = ScreenSaver::new(mpv, size, event_loop.create_proxy(), opts);
-    app.playlist_append_play(&first_path);
     let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl, None);
+    let event_proxy = event_loop.create_proxy();
+
+    let app = MpvClient::new(mpv);
+    app.playlist_append_play(&first_path);
+    let mut overlay = Overlay::new(app, size, &opts);
 
     event_loop.run(move |event, _, ctrl_flow| {
         ctrl_flow.set_wait();
 
         match event {
             Event::RedrawRequested(_) => {
-                egui_glow.run(window.window(), |_egui_ctx| {});
                 render_context
                     .render::<GLContext>(0, size.width as _, size.height as _, true)
                     .expect("Failed to draw on glutin window");
+                egui_glow.run(window.window(), |egui_ctx| {
+                    overlay.ui(egui_ctx);
+                });
                 egui_glow.paint(window.window());
                 window.swap_buffers().unwrap();
             }
             Event::WindowEvent { event, .. } => {
-                match event {
-                    WindowEvent::CloseRequested => {
-                        ctrl_flow.set_exit();
-                    }
-                    WindowEvent::KeyboardInput {
-                        input:
-                            winit::event::KeyboardInput {
-                                virtual_keycode: Some(key),
-                                state: winit::event::ElementState::Pressed,
-                                ..
-                            },
-                        ..
-                    } => match key {
-                        VirtualKeyCode::Left => app.playlist_prev(),
-                        VirtualKeyCode::Right => app.playlist_next(),
-                        VirtualKeyCode::M => app.toggle_mute(),
-                        VirtualKeyCode::Space => app.toggle_pause(),
-                        VirtualKeyCode::L => app.toggle_path_label(),
-                        _ => {}
-                    },
-                    _ => {}
-                }
-                if egui_glow.on_event(&event).repaint {
+                let EventResponse { repaint, consumed } = egui_glow.on_event(&event);
+                if repaint {
                     window.window().request_redraw();
                 }
+                if !consumed {
+                    match event {
+                        WindowEvent::CloseRequested => {
+                            ctrl_flow.set_exit();
+                        }
+                        WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    virtual_keycode: Some(key),
+                                    state: ElementState::Pressed,
+                                    ..
+                                },
+                            ..
+                        } => match key {
+                            VirtualKeyCode::Left => overlay.app.playlist_prev(),
+                            VirtualKeyCode::Right => overlay.app.playlist_next(),
+                            VirtualKeyCode::M => overlay.toggle_mute(event_proxy.clone()),
+                            VirtualKeyCode::Space => overlay.toggle_pause(event_proxy.clone()),
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+            }
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { .. },
+                ..
+            } => {
+                window.window().request_redraw();
+                overlay.set_ui_repaint_timer(event_proxy.clone());
             }
             Event::UserEvent(event) => match event {
-                UserEvent::ClearOverlay => app.maybe_clear_overlay(),
                 UserEvent::RequestRedraw => window.window().request_redraw(),
                 UserEvent::MPVEvents => loop {
-                    match app.next_event() {
+                    match overlay.app.next_event() {
                         Some(Ok(MPVEvent::StartFile)) => {
                             if let Some(path) = it.next() {
-                                app.playlist_append(&path);
+                                overlay.app.playlist_append(&path);
                             }
                         }
                         Some(Ok(MPVEvent::EndFile(_))) => {
-                            if app.finished() {
+                            if overlay.app.finished() {
                                 ctrl_flow.set_exit();
                                 break;
                             }
                         }
                         Some(Ok(MPVEvent::FileLoaded)) => {
-                            app.maybe_show_path();
+                            overlay.set_path();
                         }
                         Some(Ok(_)) => {}
                         Some(Err(err)) => {
