@@ -50,9 +50,8 @@ pub struct Overlay {
 }
 
 impl Overlay {
-    const UI_DURATION: Duration = Duration::from_millis(500);
-    const CENTER_IMAGE_DURATION: Duration = Duration::from_millis(1000);
-    const CURSOR_HIDE_DURATION: Duration = Duration::from_millis(1000);
+    const DURATION_HALF: Duration = Duration::from_millis(500);
+    const DURATION: Duration = Duration::from_millis(1000);
 
     pub fn new(app: MpvClient, size: PhysicalSize<u32>, opts: &Options) -> Self {
         let mute_toggle_button = ImageToggleButton::new(
@@ -119,15 +118,15 @@ impl Overlay {
                 .to_pos2(),
             center_image_index: 0,
             center_images,
-            last_ui_render_instant: Instant::now() - Self::CURSOR_HIDE_DURATION,
-            last_center_render_instant: Instant::now() - Self::CENTER_IMAGE_DURATION,
+            last_ui_render_instant: Instant::now() - Self::DURATION,
+            last_center_render_instant: Instant::now() - Self::DURATION,
             mute_toggle_button,
             pause_toggle_button,
         }
     }
 
     pub fn ui(&mut self, ctx: &egui::Context) {
-        if self.last_ui_render_instant.elapsed() <= Self::UI_DURATION {
+        if self.last_ui_render_instant.elapsed() < Self::DURATION_HALF {
             egui::Area::new("path_label")
                 .movable(false)
                 .interactable(false)
@@ -154,10 +153,10 @@ impl Overlay {
             {
                 self.last_ui_render_instant = Instant::now();
             };
-        } else if self.last_ui_render_instant.elapsed() > Self::CURSOR_HIDE_DURATION {
+        } else if self.last_ui_render_instant.elapsed() > Self::DURATION {
             ctx.output().cursor_icon = egui::CursorIcon::None;
         }
-        if self.last_center_render_instant.elapsed() <= Self::CENTER_IMAGE_DURATION {
+        if self.last_center_render_instant.elapsed() < Self::DURATION {
             egui::Area::new("center_area")
                 .movable(false)
                 .interactable(false)
@@ -195,8 +194,8 @@ impl Overlay {
     }
 
     pub fn needs_repaint(&self) -> bool {
-        self.last_ui_render_instant.elapsed() < Self::CURSOR_HIDE_DURATION
-            || self.last_center_render_instant.elapsed() < Self::CENTER_IMAGE_DURATION
+        self.last_ui_render_instant.elapsed() < Self::DURATION
+            || self.last_center_render_instant.elapsed() < Self::DURATION
     }
 
     pub fn set_path(&mut self) {
