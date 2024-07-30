@@ -90,7 +90,7 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
 
     let app = MpvClient::new(mpv);
     app.playlist_append_play(&first_path);
-    let mut overlay = Overlay::new(app, size, &opts);
+    let mut overlay = Overlay::new(app, size, opts);
 
     event_loop.run(move |event, _, ctrl_flow| {
         ctrl_flow.set_wait();

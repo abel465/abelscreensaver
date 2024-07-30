@@ -1,5 +1,5 @@
 use crate::mpvclient::MpvClient;
-use crate::Options;
+use crate::options::Options;
 use egui_extras::RetainedImage;
 use glutin::dpi::PhysicalSize;
 use std::time::{Duration, Instant};
@@ -37,6 +37,50 @@ enum ImageVariants {
     Play,
 }
 
+struct SettingsGui {
+    icon: RetainedImage,
+    opts: Options,
+    pub open: bool,
+}
+
+impl SettingsGui {
+    fn new(opts: Options) -> Self {
+        Self {
+            icon: RetainedImage::from_svg_bytes(
+                "settings",
+                std::include_bytes!("../assets/svg/settings.svg"),
+            )
+            .unwrap(),
+            opts,
+            open: false,
+        }
+    }
+
+    fn show(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) -> Option<egui::Response> {
+        if ui
+            .add(
+                egui::Image::new(self.icon.texture_id(ctx), self.icon.size_vec2())
+                    .sense(egui::Sense::click()),
+            )
+            .clicked()
+        {
+            self.open = !self.open;
+        }
+        self.open.then(|| {
+            egui::Window::new("settings")
+                .collapsible(false)
+                .resizable(false)
+                .fixed_pos(egui::pos2(2250.0, 1190.0))
+                .fixed_size(egui::vec2(290.0, 160.0))
+                .show(ctx, |ui| {
+                    self.opts.ui(ui);
+                })
+                .unwrap()
+                .response
+        })
+    }
+}
+
 pub struct Overlay {
     pub app: MpvClient,
     path: String,
@@ -47,13 +91,14 @@ pub struct Overlay {
     center_images: [RetainedImage; 4],
     mute_toggle_button: ImageToggleButton,
     pause_toggle_button: ImageToggleButton,
+    settings_gui: SettingsGui,
 }
 
 impl Overlay {
     const DURATION_HALF: Duration = Duration::from_millis(500);
     const DURATION: Duration = Duration::from_millis(1000);
 
-    pub fn new(app: MpvClient, size: PhysicalSize<u32>, opts: &Options) -> Self {
+    pub fn new(app: MpvClient, size: PhysicalSize<u32>, opts: Options) -> Self {
         let mute_toggle_button = ImageToggleButton::new(
             RetainedImage::from_svg_bytes(
                 "sound-on",
@@ -120,6 +165,7 @@ impl Overlay {
             center_images,
             last_ui_render_instant: Instant::now() - Self::DURATION,
             last_center_render_instant: Instant::now() - Self::DURATION,
+            settings_gui: SettingsGui::new(opts),
             mute_toggle_button,
             pause_toggle_button,
         }
@@ -136,20 +182,32 @@ impl Overlay {
                         ui.label(egui::RichText::new(&self.path).size(14.0));
                     });
                 });
-            if egui::TopBottomPanel::bottom("bottom_panel")
-                .show(ctx, |ui| {
-                    ui.horizontal_centered(|ui| {
-                        if self.pause_toggle_button.ui(ctx, ui).clicked() {
-                            self.app.set_pause(self.pause_toggle_button.toggle());
-                        }
-                        if self.mute_toggle_button.ui(ctx, ui).clicked() {
-                            self.app.set_mute(self.mute_toggle_button.toggle());
-                        }
-                    });
+            let resp = egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
+                ui.horizontal_centered(|ui| {
+                    if self.pause_toggle_button.ui(ctx, ui).clicked() {
+                        self.app.set_pause(self.pause_toggle_button.toggle());
+                    }
+                    if self.mute_toggle_button.ui(ctx, ui).clicked() {
+                        self.app.set_mute(self.mute_toggle_button.toggle());
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        self.settings_gui.show(ctx, ui)
+                    })
+                    .inner
                 })
-                .response
-                .hover_pos()
-                .is_some()
+                .inner
+            });
+            if resp.response.clicked_elsewhere()
+                && resp.inner.is_some_and(|r| r.clicked_elsewhere())
+            {
+                self.settings_gui.open = false;
+            }
+            if resp.response.hovered() || self.settings_gui.open
+            //ctx
+            //    .input()
+            //    .pointer
+            //    .hover_pos()
+            //    .is_some_and(|pos| resp.inner.is_some_and(|resp| resp.rect.contains(pos)))
             {
                 self.last_ui_render_instant = Instant::now();
             };
@@ -200,5 +258,6 @@ impl Overlay {
 
     pub fn set_path(&mut self) {
         self.path = self.app.get_path();
+        println!("{}", self.path);
     }
 }
