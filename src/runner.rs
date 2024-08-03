@@ -5,7 +5,7 @@ use egui_glow::egui_winit::winit::event::{ElementState, KeyboardInput, VirtualKe
 use egui_glow::{glow, EventResponse};
 use glutin::event::{DeviceEvent, Event, WindowEvent};
 use glutin::event_loop::{EventLoop, EventLoopBuilder};
-use libmpv::events::Event as MPVEvent;
+use libmpv::events::{Event as MPVEvent, PropertyData};
 use libmpv::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use libmpv2 as libmpv;
 use std::path::PathBuf;
@@ -26,13 +26,8 @@ fn setup_mpv(
     opts: &Options,
 ) -> (libmpv::Mpv, RenderContext) {
     let mut mpv = libmpv::Mpv::with_initializer(|mpv| {
-        mpv.set_option(
-            "image-display-duration",
-            opts.period.as_secs_f32().to_string(),
-        )?;
-        if opts.mute {
-            mpv.set_option("mute", "yes").unwrap();
-        }
+        mpv.set_option("image-display-duration", opts.period_secs)?;
+        mpv.set_option("mute", opts.mute)?;
         Ok(())
     })
     .expect("Failed creating MPV");
@@ -48,6 +43,9 @@ fn setup_mpv(
     )
     .expect("Failed creating render context");
 
+    mpv.event_context()
+        .observe_property("playback-abort", libmpv::Format::Flag, 0)
+        .unwrap();
     let event_proxy = event_loop.create_proxy();
     mpv.event_context_mut().set_wakeup_callback(move || {
         event_proxy.send_event(UserEvent::MPVEvents).unwrap();
@@ -62,9 +60,6 @@ fn setup_mpv(
 }
 
 pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
-    let Some(first_path) = it.next() else {
-        return;
-    };
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let size = event_loop
         .primary_monitor()
@@ -88,9 +83,12 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
     let (mpv, render_context) = setup_mpv(&event_loop, window.clone(), &opts);
     let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl, None);
 
-    let app = MpvClient::new(mpv);
-    app.playlist_append_play(&first_path);
-    let mut overlay = Overlay::new(app, size, opts);
+    let mut mpv_client = MpvClient::new(mpv);
+    if let Some(first_path) = it.next() {
+        mpv_client.playlist_append_play(&first_path);
+    }
+    let mut overlay = Overlay::new(size, opts);
+    let event_proxy = event_loop.create_proxy();
 
     event_loop.run(move |event, _, ctrl_flow| {
         ctrl_flow.set_wait();
@@ -101,7 +99,7 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
                     .render::<GLContext>(0, size.width as _, size.height as _, true)
                     .expect("Failed to draw on glutin window");
                 egui_glow.run(window.window(), |egui_ctx| {
-                    overlay.ui(egui_ctx);
+                    overlay.ui(egui_ctx, &mpv_client)
                 });
                 if overlay.needs_repaint() {
                     window.window().request_redraw();
@@ -128,10 +126,10 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
                                 },
                             ..
                         } => match key {
-                            VirtualKeyCode::Left => overlay.app.playlist_prev(),
-                            VirtualKeyCode::Right => overlay.app.playlist_next(),
-                            VirtualKeyCode::M => overlay.toggle_mute(),
-                            VirtualKeyCode::Space => overlay.toggle_pause(),
+                            VirtualKeyCode::Left => mpv_client.playlist_prev(),
+                            VirtualKeyCode::Right => mpv_client.playlist_next(),
+                            VirtualKeyCode::M => overlay.toggle_mute(&mpv_client),
+                            VirtualKeyCode::Space => overlay.toggle_pause(&mpv_client),
                             _ => {}
                         },
                         _ => {}
@@ -148,20 +146,21 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
             Event::UserEvent(event) => match event {
                 UserEvent::RequestRedraw => window.window().request_redraw(),
                 UserEvent::MPVEvents => loop {
-                    match overlay.app.next_event() {
-                        Some(Ok(MPVEvent::StartFile)) => {
-                            if let Some(path) = it.next() {
-                                overlay.app.playlist_append(&path);
-                            }
-                        }
-                        Some(Ok(MPVEvent::EndFile(_))) => {
-                            if overlay.app.finished() {
-                                ctrl_flow.set_exit();
-                                break;
-                            }
-                        }
+                    match mpv_client.next_event() {
                         Some(Ok(MPVEvent::FileLoaded)) => {
-                            overlay.set_path();
+                            if let Some(path) = it.next() {
+                                mpv_client.playlist_append(&path);
+                            }
+                            overlay.path = mpv_client.get_path();
+                        }
+                        Some(Ok(MPVEvent::PropertyChange {
+                            name: "playback-abort",
+                            change: PropertyData::Flag(finished),
+                            ..
+                        })) => {
+                            overlay.finished = finished;
+                            window.window().request_redraw();
+                            event_proxy.send_event(UserEvent::RequestRedraw).unwrap();
                         }
                         Some(Ok(_)) => {}
                         Some(Err(err)) => {

@@ -31,24 +31,16 @@ impl MpvClient {
             .unwrap();
     }
 
-    pub fn finished(&self) -> bool {
-        self.mpv.get_property::<String>("playlist-pos").unwrap() == "-1"
-    }
-
     pub fn next_event(&mut self) -> Option<libmpv::Result<MPVEvent>> {
         self.mpv.event_context_mut().wait_event(0.0)
     }
 
-    pub fn set_mute(&mut self, mute: bool) {
-        self.mpv
-            .set_property("mute", if mute { "yes" } else { "no" })
-            .unwrap();
+    pub fn set_mute(&self, mute: bool) {
+        self.mpv.set_property("mute", mute).unwrap();
     }
 
-    pub fn set_pause(&mut self, pause: bool) {
-        self.mpv
-            .set_property("pause", if pause { "yes" } else { "no" })
-            .unwrap();
+    pub fn set_pause(&self, pause: bool) {
+        self.mpv.set_property("pause", pause).unwrap();
     }
 
     pub fn get_path(&self) -> String {
