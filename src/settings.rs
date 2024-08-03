@@ -1,4 +1,4 @@
-use egui::{pos2, Vec2};
+use egui::{pos2, vec2, Vec2};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -7,7 +7,10 @@ pub struct Options {
     pub random: bool,
 
     // Include hidden entries
-    pub all: bool,
+    pub hidden: bool,
+
+    // Include videos
+    pub video: bool,
 
     // Mute audio
     pub mute: bool,
@@ -24,8 +27,9 @@ impl Default for Options {
         let users_dirs = directories::UserDirs::new().unwrap();
         Self {
             random: true,
-            all: false,
-            mute: true,
+            hidden: false,
+            video: true,
+            mute: false,
             period_secs: 4.0,
             paths: vec![users_dirs.picture_dir().unwrap().to_path_buf()],
         }
@@ -56,14 +60,30 @@ impl Options {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        let mut changed = false;
-        {
-            let resp = ui.checkbox(&mut self.random, "Randomize")
-                | ui.checkbox(&mut self.all, "Include hidden files")
-                | ui.checkbox(&mut self.mute, "Mute")
-                | ui.add(egui::Slider::new(&mut self.period_secs, 0.1..=20.0).text("Period"));
-            changed |= resp.changed();
-        }
+        let mut changed = egui::Frame::none()
+            .inner_margin(Vec2::splat(2.0))
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing = Vec2::splat(12.0);
+                egui::Grid::new("some_unique_id")
+                    .num_columns(2)
+                    .spacing(vec2(16.0, 10.0))
+                    .show(ui, |ui| {
+                        let mut resp = ui.checkbox(&mut self.random, "Randomize")
+                            | ui.checkbox(&mut self.hidden, "Include hidden files");
+                        ui.end_row();
+                        resp |= ui.checkbox(&mut self.video, "Include video")
+                            | ui.add_enabled(
+                                self.video,
+                                egui::Checkbox::new(&mut self.mute, "Mute video"),
+                            );
+                        ui.end_row();
+                        resp
+                    })
+                    .inner
+                    | ui.add(egui::Slider::new(&mut self.period_secs, 0.1..=20.0).text("Period"))
+            })
+            .inner
+            .changed();
 
         let focus_last_path = ui
             .horizontal(|ui| {
