@@ -10,11 +10,6 @@ use std::sync::{Arc, Mutex};
 use std::{fs, thread};
 use walkdir::WalkDir;
 
-enum Message {
-    Continue,
-    Done,
-}
-
 struct RandomMediaOpts {
     all: bool,
     video: bool,
@@ -55,7 +50,7 @@ impl RandomMediaData {
 pub struct RandomMediaIterator {
     data: Arc<Mutex<RandomMediaData>>,
     opts: RandomMediaOpts,
-    rx: Receiver<Message>,
+    rx: Receiver<()>,
     rng: ThreadRng,
 }
 
@@ -83,7 +78,7 @@ impl std::iter::Iterator for RandomMediaIterator {
     fn next(&mut self) -> Option<Self::Item> {
         'a: loop {
             while self.data.lock().unwrap().count == 0 {
-                if let Ok(Message::Done) = self.rx.recv() {
+                if self.rx.recv().is_err() {
                     break 'a;
                 }
             }
@@ -108,7 +103,7 @@ impl std::iter::Iterator for RandomMediaIterator {
     }
 }
 
-fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Options, tx: Sender<Message>) {
+fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Options, tx: Sender<()>) {
     let mut dirs = VecDeque::from(opts.paths);
 
     while let Some(dir) = dirs.pop_front() {
@@ -135,11 +130,9 @@ fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Options, tx: Sender<Message
             data.indices.extend(current_count..current_count + count);
             data.count += count;
 
-            tx.send(Message::Continue).ok();
+            tx.send(()).ok();
         }
     }
-
-    tx.send(Message::Done).ok();
 }
 
 fn is_valid_media<P1: AsRef<Path>, P2: AsRef<Path>>(
