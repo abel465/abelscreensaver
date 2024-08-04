@@ -64,7 +64,7 @@ impl Options {
             .inner_margin(Vec2::splat(2.0))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = Vec2::splat(12.0);
-                egui::Grid::new("some_unique_id")
+                egui::Grid::new("settings_grid")
                     .num_columns(2)
                     .spacing(vec2(16.0, 10.0))
                     .show(ui, |ui| {

@@ -147,13 +147,15 @@ fn is_valid_media<P1: AsRef<Path>, P2: AsRef<Path>>(
     file_name: P2,
     include_video: bool,
 ) -> bool {
-    mime_guess::from_path(file_name).first().map_or(false, |x| {
-        if include_video {
-            matches!(x.type_(), mime::IMAGE | mime::VIDEO)
-        } else {
-            matches!(x.type_(), mime::IMAGE)
-        }
-    }) && ffprobe::ffprobe(path).is_ok()
+    mime_guess::from_path(file_name)
+        .first()
+        .map_or(false, |x| match (x.type_(), x.subtype()) {
+            (_, mime::SVG) => false,
+            (mime::VIDEO, _) => include_video,
+            (mime::IMAGE, _) => true,
+            _ => false,
+        })
+        && ffprobe::ffprobe(path).is_ok()
 }
 
 fn is_hidden(str: &OsStr) -> bool {
