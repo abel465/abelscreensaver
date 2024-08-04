@@ -20,15 +20,15 @@ impl MpvClient {
     }
 
     pub fn playlist_append_play(&self, path: &Path) {
+        let quoted = format!("'{}'", path.to_str().unwrap());
         self.mpv
-            .command("loadfile", &[&path.to_str().unwrap(), "append-play"])
+            .command("loadfile", &[&quoted, "append-play"])
             .unwrap();
     }
 
     pub fn playlist_append(&self, path: &Path) {
-        self.mpv
-            .command("loadfile", &[&path.to_str().unwrap(), "append"])
-            .unwrap();
+        let quoted = format!("'{}'", path.to_str().unwrap());
+        self.mpv.command("loadfile", &[&quoted, "append"]).unwrap();
     }
 
     pub fn next_event(&mut self) -> Option<libmpv::Result<MPVEvent>> {
