@@ -31,6 +31,10 @@ impl MpvClient {
         self.mpv.command("loadfile", &[&quoted, "append"]).unwrap();
     }
 
+    pub fn playlist_from_beginning(&self) {
+        self.mpv.set_property("playlist-pos", 0).unwrap();
+    }
+
     pub fn next_event(&mut self) -> Option<libmpv::Result<MPVEvent>> {
         self.mpv.event_context_mut().wait_event(0.0)
     }

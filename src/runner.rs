@@ -83,12 +83,13 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
     let (mpv, render_context) = setup_mpv(&event_loop, window.clone(), &opts);
     let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl, None);
 
+    let mut overlay = Overlay::new(size, opts);
     let mut mpv_client = MpvClient::new(mpv);
     if let Some(first_path) = it.next() {
         mpv_client.playlist_append_play(&first_path);
+    } else {
+        overlay.no_media = true;
     }
-    let mut overlay = Overlay::new(size, opts);
-    let event_proxy = event_loop.create_proxy();
 
     event_loop.run(move |event, _, ctrl_flow| {
         ctrl_flow.set_wait();
@@ -155,12 +156,10 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
                         }
                         Some(Ok(MPVEvent::PropertyChange {
                             name: "playback-abort",
-                            change: PropertyData::Flag(finished),
+                            change: PropertyData::Flag(true),
                             ..
                         })) => {
-                            overlay.finished = finished;
-                            window.window().request_redraw();
-                            event_proxy.send_event(UserEvent::RequestRedraw).unwrap();
+                            mpv_client.playlist_from_beginning();
                         }
                         Some(Ok(_)) => {}
                         Some(Err(err)) => {

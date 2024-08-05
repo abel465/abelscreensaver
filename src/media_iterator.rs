@@ -88,7 +88,7 @@ impl std::iter::Iterator for RandomMediaIterator {
                 for entry in entries.filter_map(|x| x.ok()) {
                     let file_name = entry.file_name();
                     if (self.opts.all || !is_hidden(file_name.as_os_str()))
-                        && entry.file_type().map_or(false, |x| x.is_file())
+                        && entry.file_type().is_ok_and(|x| x.is_file())
                         && is_valid_media(entry.path(), file_name, self.opts.video)
                     {
                         if count == target {
@@ -142,7 +142,7 @@ fn is_valid_media<P1: AsRef<Path>, P2: AsRef<Path>>(
 ) -> bool {
     mime_guess::from_path(file_name)
         .first()
-        .map_or(false, |x| match (x.type_(), x.subtype()) {
+        .is_some_and(|x| match (x.type_(), x.subtype()) {
             (_, mime::SVG) => false,
             (mime::VIDEO, _) => include_video,
             (mime::IMAGE, _) => true,
@@ -152,7 +152,7 @@ fn is_valid_media<P1: AsRef<Path>, P2: AsRef<Path>>(
 }
 
 fn is_hidden(str: &OsStr) -> bool {
-    str.to_str().map_or(true, |s| s.starts_with('.'))
+    str.to_str().unwrap().starts_with('.')
 }
 
 pub fn unspecified_media_iterator(opts: Options) -> impl Iterator<Item = PathBuf> {

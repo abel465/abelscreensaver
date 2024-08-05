@@ -86,7 +86,7 @@ impl SettingsGui {
 
 pub struct Overlay {
     pub path: String,
-    pub finished: bool,
+    pub no_media: bool,
     last_ui_render_instant: Instant,
     last_center_render_instant: Instant,
     center_pos: egui::Pos2,
@@ -161,7 +161,7 @@ impl Overlay {
             settings_gui: SettingsGui::new(opts),
             mute_toggle_button,
             pause_toggle_button,
-            finished: false,
+            no_media: false,
         }
     }
 
@@ -202,13 +202,13 @@ impl Overlay {
         } else if self.last_ui_render_instant.elapsed() > Self::DURATION {
             ctx.output().cursor_icon = egui::CursorIcon::None;
         }
-        if self.last_center_render_instant.elapsed() < Self::DURATION || self.finished {
+        if self.last_center_render_instant.elapsed() < Self::DURATION || self.no_media {
             egui::Area::new("center_area")
                 .interactable(false)
                 .fixed_pos(self.center_pos)
                 .show(ctx, |ui| {
-                    if self.finished {
-                        ui.label(egui::RichText::from("Finished").size(32.0));
+                    if self.no_media {
+                        ui.label(egui::RichText::from("No Media").size(36.0));
                     } else {
                         self.center_images[self.center_image_index].show(ui);
                     }
