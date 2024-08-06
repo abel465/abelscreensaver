@@ -89,10 +89,14 @@ impl std::iter::Iterator for RandomMediaIterator {
                     let file_name = entry.file_name();
                     if (self.opts.all || !is_hidden(file_name.as_os_str()))
                         && entry.file_type().is_ok_and(|x| x.is_file())
-                        && is_valid_media(entry.path(), file_name, self.opts.video)
+                        && is_valid_media(file_name, self.opts.video)
                     {
                         if count == target {
-                            return Some(entry.path());
+                            let path = entry.path();
+                            match ffprobe::ffprobe(&path) {
+                                Ok(_) => return Some(path),
+                                Err(_) => continue 'a,
+                            }
                         }
                         count += 1;
                     }
@@ -115,9 +119,7 @@ fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Options, tx: Sender<()>) {
                     if let Ok(ft) = entry.file_type() {
                         if ft.is_dir() {
                             dirs.push_back(entry.path());
-                        } else if ft.is_file()
-                            && is_valid_media(entry.path(), file_name, opts.video)
-                        {
+                        } else if ft.is_file() && is_valid_media(file_name, opts.video) {
                             count += 1;
                         }
                     }
@@ -135,11 +137,7 @@ fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Options, tx: Sender<()>) {
     }
 }
 
-fn is_valid_media<P1: AsRef<Path>, P2: AsRef<Path>>(
-    path: P1,
-    file_name: P2,
-    include_video: bool,
-) -> bool {
+fn is_valid_media<P: AsRef<Path>>(file_name: P, include_video: bool) -> bool {
     mime_guess::from_path(file_name)
         .first()
         .is_some_and(|x| match (x.type_(), x.subtype()) {
@@ -148,7 +146,6 @@ fn is_valid_media<P1: AsRef<Path>, P2: AsRef<Path>>(
             (mime::IMAGE, _) => true,
             _ => false,
         })
-        && ffprobe::ffprobe(path).is_ok()
 }
 
 fn is_hidden(str: &OsStr) -> bool {
@@ -161,7 +158,9 @@ pub fn unspecified_media_iterator(opts: Options) -> impl Iterator<Item = PathBuf
             .into_iter()
             .filter_entry(move |x| opts.hidden || !is_hidden(x.file_name()))
             .filter_map(|x| x.ok())
-            .filter(move |x| is_valid_media(x.path(), x.file_name(), opts.video))
+            .filter(move |x| {
+                is_valid_media(x.file_name(), opts.video) && ffprobe::ffprobe(x.path()).is_ok()
+            })
             .map(|x| x.into_path())
     })
 }
