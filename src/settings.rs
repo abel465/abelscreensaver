@@ -1,7 +1,7 @@
 use egui::{pos2, vec2, Vec2};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Options {
     // Randomize playback
     pub random: bool,

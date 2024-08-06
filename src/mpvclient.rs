@@ -47,7 +47,23 @@ impl MpvClient {
         self.mpv.set_property("pause", pause).unwrap();
     }
 
+    pub fn set_image_duration(&self, duration_secs: f64) {
+        self.mpv
+            .set_property("image-display-duration", duration_secs)
+            .unwrap();
+    }
+
     pub fn get_path(&self) -> String {
         self.mpv.get_property("path").unwrap()
+    }
+
+    /// Clear the playlist, except the currently played file.
+    pub fn playlist_clear(&self) {
+        self.mpv.command("playlist-clear", &[]).unwrap();
+    }
+
+    /// Remove the first item from the playlist.
+    pub fn playlist_remove_first(&self) {
+        self.mpv.command("playlist-remove", &["0"]).unwrap();
     }
 }

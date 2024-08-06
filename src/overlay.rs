@@ -1,7 +1,8 @@
-use crate::mpvclient::MpvClient;
 use crate::settings::Options;
+use crate::{mpvclient::MpvClient, runner::UserEvent};
+use egui::vec2;
 use egui_extras::RetainedImage;
-use glutin::dpi::PhysicalSize;
+use glutin::{dpi::PhysicalSize, event_loop::EventLoopProxy};
 use std::time::{Duration, Instant};
 
 struct ImageToggleButton {
@@ -40,7 +41,8 @@ enum ImageVariants {
 struct SettingsGui {
     icon: RetainedImage,
     opts: Options,
-    pub open: bool,
+    opts_copy: Options,
+    open: bool,
 }
 
 impl SettingsGui {
@@ -51,12 +53,18 @@ impl SettingsGui {
                 std::include_bytes!("../assets/svg/settings.svg"),
             )
             .unwrap(),
+            opts_copy: opts.clone(),
             opts,
             open: false,
         }
     }
 
-    fn show(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) -> Option<egui::Response> {
+    fn show(
+        &mut self,
+        ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        event_proxy: EventLoopProxy<UserEvent>,
+    ) -> Option<egui::Response> {
         if ui
             .add(
                 egui::Image::new(self.icon.texture_id(ctx), self.icon.size_vec2())
@@ -66,21 +74,51 @@ impl SettingsGui {
         {
             self.open = !self.open;
         }
-        let size = egui::vec2(290.0, 160.0);
+        let size = vec2(290.0, 160.0);
         let window_size = ctx.input().screen_rect().size();
-        self.open.then(|| {
-            egui::Window::new("Settings")
-                .open(&mut self.open)
-                .collapsible(false)
-                .resizable(false)
-                .fixed_pos((window_size - size - egui::vec2(18.0, 88.0)).to_pos2())
-                .fixed_size(size)
-                .show(ctx, |ui| {
-                    self.opts.ui(ui);
-                })
-                .unwrap()
-                .response
-        })
+        let mut open = self.open;
+        let resp = egui::Window::new("Settings")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .fixed_pos((window_size - size - vec2(18.0, 110.0)).to_pos2())
+            .fixed_size(size)
+            .show(ctx, |ui| {
+                self.opts.ui(ui);
+                egui::Frame::none()
+                    .show(ui, |ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.button("Ok")
+                        })
+                        .inner
+                    })
+                    .inner
+            });
+        if self.open && !open {
+            self.close_cancel();
+        }
+        let ok_clicked = resp
+            .as_ref()
+            .is_some_and(|resp| resp.inner.as_ref().unwrap().clicked());
+        if ok_clicked {
+            self.close_apply(event_proxy);
+        }
+        resp.map(|resp| resp.response)
+    }
+
+    pub fn close_cancel(&mut self) {
+        self.open = false;
+        self.opts = self.opts_copy.clone();
+    }
+
+    fn close_apply(&mut self, event_proxy: EventLoopProxy<UserEvent>) {
+        self.open = false;
+        if self.opts != self.opts_copy {
+            self.opts_copy = self.opts.clone();
+            event_proxy
+                .send_event(UserEvent::Reset(self.opts.clone()))
+                .unwrap();
+        }
     }
 }
 
@@ -150,7 +188,7 @@ impl Overlay {
 
         Self {
             path: String::new(),
-            center_pos: ((egui::vec2(size.width as f32, size.height as f32)
+            center_pos: ((vec2(size.width as f32, size.height as f32)
                 - center_images[0].size_vec2())
                 / 2.0)
                 .to_pos2(),
@@ -165,7 +203,12 @@ impl Overlay {
         }
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context, mpv_client: &MpvClient) {
+    pub fn ui(
+        &mut self,
+        ctx: &egui::Context,
+        mpv_client: &MpvClient,
+        event_proxy: EventLoopProxy<UserEvent>,
+    ) {
         if self.last_ui_render_instant.elapsed() < Self::DURATION_HALF {
             let window_height = ctx.input().screen_rect().height();
             egui::Area::new("path_label")
@@ -185,7 +228,7 @@ impl Overlay {
                         mpv_client.set_mute(self.mute_toggle_button.toggle());
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        self.settings_gui.show(ctx, ui)
+                        self.settings_gui.show(ctx, ui, event_proxy)
                     })
                     .inner
                 })
@@ -194,7 +237,7 @@ impl Overlay {
             if resp.response.clicked_elsewhere()
                 && resp.inner.is_some_and(|r| r.clicked_elsewhere())
             {
-                self.settings_gui.open = false;
+                self.settings_gui.close_cancel();
             }
             if resp.response.hovered() || self.settings_gui.open {
                 self.last_ui_render_instant = Instant::now();

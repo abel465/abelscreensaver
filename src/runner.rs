@@ -1,3 +1,4 @@
+use crate::media_iterator::media_iterator;
 use crate::mpvclient::MpvClient;
 use crate::overlay::Overlay;
 use crate::Options;
@@ -8,7 +9,6 @@ use glutin::event_loop::{EventLoop, EventLoopBuilder};
 use libmpv::events::{Event as MPVEvent, PropertyData};
 use libmpv::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use libmpv2 as libmpv;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -16,6 +16,7 @@ use std::sync::Arc;
 pub enum UserEvent {
     RequestRedraw,
     MPVEvents,
+    Reset(Options),
 }
 
 type GLContext = Rc<glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>>;
@@ -59,7 +60,7 @@ fn setup_mpv(
     (mpv, render_context)
 }
 
-pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
+pub fn run(opts: Options) {
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let size = event_loop
         .primary_monitor()
@@ -83,6 +84,7 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
     let (mpv, render_context) = setup_mpv(&event_loop, window.clone(), &opts);
     let mut egui_glow = egui_glow::winit::EguiGlow::new(&event_loop, gl, None);
 
+    let mut it = media_iterator(opts.clone());
     let mut overlay = Overlay::new(size, opts);
     let mut mpv_client = MpvClient::new(mpv);
     if let Some(first_path) = it.next() {
@@ -90,6 +92,7 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
     } else {
         overlay.no_media = true;
     }
+    let event_proxy = event_loop.create_proxy();
 
     event_loop.run(move |event, _, ctrl_flow| {
         ctrl_flow.set_wait();
@@ -100,7 +103,7 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
                     .render::<GLContext>(0, size.width as _, size.height as _, true)
                     .expect("Failed to draw on glutin window");
                 egui_glow.run(window.window(), |egui_ctx| {
-                    overlay.ui(egui_ctx, &mpv_client)
+                    overlay.ui(egui_ctx, &mpv_client, event_proxy.clone())
                 });
                 if overlay.needs_repaint() {
                     window.window().request_redraw();
@@ -173,6 +176,25 @@ pub fn run<I: Iterator<Item = PathBuf> + 'static>(opts: Options, mut it: I) {
                         }
                     }
                 },
+                UserEvent::Reset(opts) => {
+                    mpv_client.set_pause(true);
+                    mpv_client.playlist_clear();
+                    it = media_iterator(opts.clone());
+                    let had_media = !overlay.no_media;
+                    overlay.no_media = if let Some(first_path) = it.next() {
+                        mpv_client.playlist_append_play(&first_path);
+                        false
+                    } else {
+                        true
+                    };
+                    mpv_client.set_image_duration(opts.period_secs);
+                    mpv_client.set_mute(opts.mute);
+                    mpv_client.playlist_next();
+                    if had_media {
+                        mpv_client.playlist_remove_first();
+                    }
+                    mpv_client.set_pause(false);
+                }
             },
             _ => {}
         }
