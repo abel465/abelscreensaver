@@ -80,7 +80,11 @@ impl Options {
                         resp
                     })
                     .inner
-                    | ui.add(egui::Slider::new(&mut self.period_secs, 0.1..=20.0).text("Period"))
+                    | ui.add(
+                        egui::Slider::new(&mut self.period_secs, 0.1..=20.0)
+                            .clamp_to_range(false)
+                            .text("Period"),
+                    )
             })
             .inner
             .changed();
