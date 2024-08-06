@@ -12,7 +12,10 @@ impl MpvClient {
     }
 
     pub fn playlist_prev(&self) {
-        self.mpv.command("playlist-prev", &[]).ok();
+        let playlist_pos = self.mpv.get_property::<i64>("playlist-pos").unwrap();
+        if playlist_pos != 0 {
+            self.mpv.command("playlist-prev", &[]).ok();
+        }
     }
 
     pub fn playlist_next(&self) {
@@ -31,8 +34,9 @@ impl MpvClient {
         self.mpv.command("loadfile", &[&quoted, "append"]).unwrap();
     }
 
-    pub fn playlist_from_beginning(&self) {
-        self.mpv.set_property("playlist-pos", 0).unwrap();
+    pub fn playlist_replace(&self, path: &Path) {
+        let quoted = format!("'{}'", path.to_str().unwrap());
+        self.mpv.command("loadfile", &[&quoted]).unwrap();
     }
 
     pub fn next_event(&mut self) -> Option<libmpv::Result<MPVEvent>> {
@@ -53,17 +57,8 @@ impl MpvClient {
             .unwrap();
     }
 
-    pub fn get_path(&self) -> String {
-        self.mpv.get_property("path").unwrap()
-    }
-
     /// Clear the playlist, except the currently played file.
     pub fn playlist_clear(&self) {
         self.mpv.command("playlist-clear", &[]).unwrap();
-    }
-
-    /// Remove the first item from the playlist.
-    pub fn playlist_remove_first(&self) {
-        self.mpv.command("playlist-remove", &["0"]).unwrap();
     }
 }

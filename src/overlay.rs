@@ -124,7 +124,7 @@ impl SettingsGui {
 
 pub struct Overlay {
     pub path: String,
-    pub no_media: bool,
+    pub has_media: bool,
     last_ui_render_instant: Instant,
     last_center_render_instant: Instant,
     center_pos: egui::Pos2,
@@ -200,7 +200,7 @@ impl Overlay {
             settings_gui: SettingsGui::new(opts),
             mute_toggle_button,
             pause_toggle_button,
-            no_media: false,
+            has_media: true,
             keep_visible: false,
         }
     }
@@ -213,14 +213,16 @@ impl Overlay {
     ) {
         if self.last_ui_render_instant.elapsed() < Self::DURATION_HALF || self.keep_visible {
             let window_height = ctx.input().screen_rect().height();
-            egui::Area::new("path_label")
-                .interactable(false)
-                .fixed_pos(egui::pos2(0.0, window_height - 22.0))
-                .show(ctx, |ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.label(egui::RichText::new(&self.path).size(14.0));
+            if self.has_media {
+                egui::Area::new("path_label")
+                    .interactable(false)
+                    .fixed_pos(egui::pos2(0.0, window_height - 22.0))
+                    .show(ctx, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.label(egui::RichText::new(&self.path).size(14.0));
+                        });
                     });
-                });
+            }
             let resp = egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
                     if self.pause_toggle_button.ui(ctx, ui).clicked() {
@@ -250,16 +252,20 @@ impl Overlay {
         } else if self.last_ui_render_instant.elapsed() > Self::DURATION {
             ctx.output().cursor_icon = egui::CursorIcon::None;
         }
-        if self.last_center_render_instant.elapsed() < Self::DURATION || self.no_media {
+        if !self.has_media {
+            egui::Area::new("no_media")
+                .interactable(false)
+                .fixed_pos(self.center_pos)
+                .show(ctx, |ui| {
+                    ui.label(egui::RichText::from("No Media").size(36.0));
+                });
+        }
+        if self.last_center_render_instant.elapsed() < Self::DURATION {
             egui::Area::new("center_area")
                 .interactable(false)
                 .fixed_pos(self.center_pos)
                 .show(ctx, |ui| {
-                    if self.no_media {
-                        ui.label(egui::RichText::from("No Media").size(36.0));
-                    } else {
-                        self.center_images[self.center_image_index].show(ui);
-                    }
+                    self.center_images[self.center_image_index].show(ui);
                 });
         }
     }
