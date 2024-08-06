@@ -133,6 +133,7 @@ pub struct Overlay {
     mute_toggle_button: ImageToggleButton,
     pause_toggle_button: ImageToggleButton,
     settings_gui: SettingsGui,
+    keep_visible: bool,
 }
 
 impl Overlay {
@@ -200,6 +201,7 @@ impl Overlay {
             mute_toggle_button,
             pause_toggle_button,
             no_media: false,
+            keep_visible: false,
         }
     }
 
@@ -209,7 +211,7 @@ impl Overlay {
         mpv_client: &MpvClient,
         event_proxy: EventLoopProxy<UserEvent>,
     ) {
-        if self.last_ui_render_instant.elapsed() < Self::DURATION_HALF {
+        if self.last_ui_render_instant.elapsed() < Self::DURATION_HALF || self.keep_visible {
             let window_height = ctx.input().screen_rect().height();
             egui::Area::new("path_label")
                 .interactable(false)
@@ -239,8 +241,11 @@ impl Overlay {
             {
                 self.settings_gui.close_cancel();
             }
-            if resp.response.hovered() || self.settings_gui.open {
+            self.keep_visible = if resp.response.hovered() || self.settings_gui.open {
                 self.last_ui_render_instant = Instant::now();
+                true
+            } else {
+                false
             };
         } else if self.last_ui_render_instant.elapsed() > Self::DURATION {
             ctx.output().cursor_icon = egui::CursorIcon::None;
