@@ -134,6 +134,7 @@ pub struct Overlay {
     pause_toggle_button: ImageToggleButton,
     settings_gui: SettingsGui,
     keep_visible: bool,
+    path_copy_instant: Instant,
 }
 
 impl Overlay {
@@ -187,6 +188,8 @@ impl Overlay {
             .unwrap(),
         ];
 
+        let inactive_instant = Instant::now() - Self::DURATION * 10;
+
         Self {
             path: String::new(),
             center_pos: ((vec2(size.width as f32, size.height as f32)
@@ -195,13 +198,14 @@ impl Overlay {
                 .to_pos2(),
             center_image_index: 0,
             center_images,
-            last_ui_render_instant: Instant::now() - Self::DURATION,
-            last_center_render_instant: Instant::now() - Self::DURATION,
+            last_ui_render_instant: inactive_instant,
+            last_center_render_instant: inactive_instant,
             settings_gui: SettingsGui::new(opts),
             mute_toggle_button,
             pause_toggle_button,
             has_media: true,
             keep_visible: false,
+            path_copy_instant: inactive_instant,
         }
     }
 
@@ -212,43 +216,7 @@ impl Overlay {
         event_proxy: EventLoopProxy<UserEvent>,
     ) {
         if self.last_ui_render_instant.elapsed() < Self::DURATION_HALF || self.keep_visible {
-            let window_height = ctx.input().screen_rect().height();
-            if self.has_media {
-                egui::Area::new("path_label")
-                    .interactable(false)
-                    .fixed_pos(egui::pos2(0.0, window_height - 22.0))
-                    .show(ctx, |ui| {
-                        ui.vertical_centered(|ui| {
-                            ui.label(egui::RichText::new(&self.path).size(14.0));
-                        });
-                    });
-            }
-            let resp = egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
-                ui.horizontal_centered(|ui| {
-                    if self.pause_toggle_button.ui(ctx, ui).clicked() {
-                        mpv_client.set_pause(self.pause_toggle_button.toggle());
-                    }
-                    if self.mute_toggle_button.ui(ctx, ui).clicked() {
-                        mpv_client.set_mute(self.mute_toggle_button.toggle());
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        self.settings_gui.show(ctx, ui, event_proxy)
-                    })
-                    .inner
-                })
-                .inner
-            });
-            if resp.response.clicked_elsewhere()
-                && resp.inner.is_some_and(|r| r.clicked_elsewhere())
-            {
-                self.settings_gui.close_cancel();
-            }
-            self.keep_visible = if resp.response.hovered() || self.settings_gui.open {
-                self.last_ui_render_instant = Instant::now();
-                true
-            } else {
-                false
-            };
+            self.bottom_panel(ctx, mpv_client, event_proxy);
         } else if self.last_ui_render_instant.elapsed() > Self::DURATION {
             ctx.output().cursor_icon = egui::CursorIcon::None;
         }
@@ -267,6 +235,74 @@ impl Overlay {
                 .show(ctx, |ui| {
                     self.center_images[self.center_image_index].show(ui);
                 });
+        }
+    }
+
+    fn bottom_panel(
+        &mut self,
+        ctx: &egui::Context,
+        mpv_client: &MpvClient,
+        event_proxy: EventLoopProxy<UserEvent>,
+    ) {
+        let egui::InnerResponse { response, inner } = egui::TopBottomPanel::bottom("bottom_panel")
+            .show(ctx, |ui| {
+                ui.horizontal_centered(|ui| {
+                    if self.pause_toggle_button.ui(ctx, ui).clicked() {
+                        mpv_client.set_pause(self.pause_toggle_button.toggle());
+                    }
+                    if self.mute_toggle_button.ui(ctx, ui).clicked() {
+                        mpv_client.set_mute(self.mute_toggle_button.toggle());
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let resp = self.settings_gui.show(ctx, ui, event_proxy);
+                        if self.has_media {
+                            self.path_label(ctx, ui)
+                        }
+                        resp
+                    })
+                    .inner
+                })
+                .inner
+            });
+        if response.clicked_elsewhere() && inner.is_some_and(|r| r.clicked_elsewhere()) {
+            self.settings_gui.close_cancel();
+        }
+        self.keep_visible = if self.settings_gui.open || response.hovered() {
+            self.last_ui_render_instant = Instant::now();
+            true
+        } else {
+            false
+        };
+    }
+
+    fn path_label(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        let path_label_width = egui::Area::new("phantom_path_label")
+            .interactable(false)
+            .show(ctx, |ui| {
+                ui.add_visible(
+                    false,
+                    egui::Label::new(egui::RichText::new(&self.path).size(14.0)),
+                )
+            })
+            .response
+            .rect
+            .width();
+        let available_width = ui.available_width();
+        ui.add_space((available_width - path_label_width) / 2.0);
+        if ui
+            .add(
+                egui::Label::new(egui::RichText::new(&self.path).size(14.0))
+                    .sense(egui::Sense::click()),
+            )
+            .on_hover_text(if self.path_copy_instant.elapsed() < Self::DURATION * 2 {
+                "Copied"
+            } else {
+                "Click to copy"
+            })
+            .clicked()
+        {
+            ui.output().copied_text = self.path.clone();
+            self.path_copy_instant = Instant::now();
         }
     }
 
