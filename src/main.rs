@@ -9,6 +9,11 @@ use std::fs::File;
 use std::io::prelude::Write;
 
 fn main() {
+    if let Err(ffprobe::FfProbeError::Io(err)) = ffprobe::ffprobe("") {
+        if err.kind() == std::io::ErrorKind::NotFound {
+            panic!("ffprobe: command not found");
+        }
+    }
     let temp_dir = std::env::temp_dir().join("abel_screensaver/");
     std::fs::create_dir_all(&temp_dir).unwrap();
     let black_pixel_path = temp_dir.join("black_pixel.pbm");
