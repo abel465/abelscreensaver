@@ -25,13 +25,19 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         let users_dirs = directories::UserDirs::new().unwrap();
+        let paths = users_dirs
+            .picture_dir()
+            .map(|path| path.to_path_buf())
+            .or_else(|| std::env::current_dir().ok())
+            .into_iter()
+            .collect();
         Self {
             random: true,
             hidden: false,
             video: true,
             mute: false,
             period_secs: 4.0,
-            paths: vec![users_dirs.picture_dir().unwrap().to_path_buf()],
+            paths,
         }
     }
 }
