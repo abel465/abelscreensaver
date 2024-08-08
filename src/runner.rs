@@ -93,7 +93,7 @@ pub fn run(opts: Options, black_pixel_path: PathBuf) {
         mpv_client.playlist_append_play(&first_path);
         true
     } else {
-        mpv_client.set_pause(true);
+        mpv_client.set_image_duration(f64::MAX);
         mpv_client.playlist_append_play(&black_pixel_path);
         false
     };
@@ -186,23 +186,21 @@ pub fn run(opts: Options, black_pixel_path: PathBuf) {
                     }
                 },
                 UserEvent::Reset(opts) => {
-                    mpv_client.set_pause(true);
                     it = media_iterator(opts.clone());
                     has_media = if let Some(first_path) = it.next() {
                         mpv_client.playlist_replace(&first_path);
+                        mpv_client.playlist_clear();
+                        mpv_client.set_image_duration(opts.period_secs);
+                        mpv_client.set_mute(opts.mute);
                         true
                     } else {
                         if has_media {
                             mpv_client.playlist_replace(&black_pixel_path);
+                            mpv_client.playlist_clear();
+                            mpv_client.set_image_duration(f64::MAX);
                         }
                         false
                     };
-                    mpv_client.playlist_clear();
-                    if has_media {
-                        mpv_client.set_pause(false);
-                        mpv_client.set_image_duration(opts.period_secs);
-                        mpv_client.set_mute(opts.mute);
-                    }
                 }
             },
             _ => {}
