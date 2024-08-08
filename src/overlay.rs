@@ -102,6 +102,7 @@ impl SettingsGui {
             .is_some_and(|resp| resp.inner.as_ref().unwrap().clicked());
         if ok_clicked {
             self.close_apply(event_proxy);
+            self.opts.save();
         }
         resp.map(|resp| resp.response)
     }

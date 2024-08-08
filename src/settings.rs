@@ -57,7 +57,7 @@ impl Options {
         }
     }
 
-    fn save(&self) {
+    pub fn save(&self) {
         let serialized = serde_json::to_string_pretty(self).unwrap();
         let project_dirs = directories::ProjectDirs::from("", "", "abelscreensaver").unwrap();
         let config_dir = project_dirs.config_dir();
@@ -66,7 +66,7 @@ impl Options {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        let mut changed = egui::Frame::none()
+        egui::Frame::none()
             .inner_margin(Vec2::splat(2.0))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = Vec2::splat(12.0);
@@ -74,27 +74,22 @@ impl Options {
                     .num_columns(2)
                     .spacing(vec2(16.0, 10.0))
                     .show(ui, |ui| {
-                        let mut resp = ui.checkbox(&mut self.random, "Randomize")
-                            | ui.checkbox(&mut self.hidden, "Include hidden files");
+                        ui.checkbox(&mut self.random, "Randomize");
+                        ui.checkbox(&mut self.hidden, "Include hidden files");
                         ui.end_row();
-                        resp |= ui.checkbox(&mut self.video, "Include video")
-                            | ui.add_enabled(
-                                self.video,
-                                egui::Checkbox::new(&mut self.mute, "Mute video"),
-                            );
+                        ui.checkbox(&mut self.video, "Include video");
+                        ui.add_enabled(
+                            self.video,
+                            egui::Checkbox::new(&mut self.mute, "Mute video"),
+                        );
                         ui.end_row();
-                        resp
-                    })
-                    .inner
-                    | ui.add(
-                        egui::Slider::new(&mut self.period_secs, 0.1..=20.0)
-                            .clamp_to_range(false)
-                            .text("Period"),
-                    )
-            })
-            .inner
-            .changed();
-
+                    });
+                ui.add(
+                    egui::Slider::new(&mut self.period_secs, 0.1..=20.0)
+                        .clamp_to_range(false)
+                        .text("Period"),
+                );
+            });
         let focus_last_path = ui
             .horizontal(|ui| {
                 ui.heading("Paths");
@@ -111,8 +106,7 @@ impl Options {
                 clicked
             })
             .inner;
-
-        changed |= egui::Frame::none()
+        egui::Frame::none()
             .fill(egui::Color32::from_gray(20))
             .rounding(egui::Rounding::same(2.0))
             .show(ui, |ui| {
@@ -121,42 +115,30 @@ impl Options {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         let length = self.paths.len();
-                        let mut remove_index: Option<usize> = None;
-                        let changed = (0..length).fold(false, |changed, i| {
-                            let mut str = self.paths[i].to_str().unwrap().to_string();
-                            ui.horizontal(|ui| {
-                                let text_edit = ui.add(
-                                    egui::TextEdit::singleline(&mut str)
-                                        .desired_width(260.0)
-                                        .margin(egui::vec2(13.0, 0.0)),
-                                );
-                                if text_edit.changed() {
-                                    self.paths[i] = PathBuf::from(std::ffi::OsString::from(str));
-                                }
-                                if i == length - 1 && focus_last_path {
-                                    text_edit.scroll_to_me(None);
-                                    ui.memory().request_focus(text_edit.id);
-                                }
-                                let remove_button = remove_button(ui);
-                                if remove_button.clicked() {
-                                    remove_index = Some(i);
-                                }
-                                text_edit.changed() || remove_button.clicked()
+                        (0..length)
+                            .fold(None, |remove_index, i| {
+                                let path = &mut self.paths[i];
+                                let mut str = path.to_str().unwrap().to_string();
+                                ui.horizontal(|ui| {
+                                    let text_edit = ui.add(
+                                        egui::TextEdit::singleline(&mut str)
+                                            .desired_width(260.0)
+                                            .margin(egui::vec2(13.0, 0.0)),
+                                    );
+                                    if text_edit.changed() {
+                                        *path = PathBuf::from(std::ffi::OsString::from(str));
+                                    }
+                                    if focus_last_path && i == length - 1 {
+                                        text_edit.scroll_to_me(None);
+                                        ui.memory().request_focus(text_edit.id);
+                                    }
+                                    remove_button(ui).clicked().then_some(i).or(remove_index)
+                                })
+                                .inner
                             })
-                            .inner
-                                || changed
-                        });
-                        if let Some(remove_index) = remove_index {
-                            self.paths.remove(remove_index);
-                        }
-                        changed
+                            .map(|i| self.paths.remove(i));
                     })
-                    .inner
-            })
-            .inner;
-        if changed {
-            self.save();
-        }
+            });
     }
 }
 
