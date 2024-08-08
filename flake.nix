@@ -12,12 +12,20 @@
   }:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {inherit system;};
+      buildInputs = with pkgs; [fontconfig mpv ffmpeg];
+      nativeBuildInputs = with pkgs; [makeWrapper cmake pkg-config];
     in rec {
       abelscreensaver = pkgs.rustPlatform.buildRustPackage {
         pname = "abelscreensaver";
         version = "0.0.0";
         src = ./.;
-        cargoHash = "sha256-lK7g0j0cObSP1/rVM1jd402OJAFHo6psOutsSDkK33w=";
+        cargoHash = "sha256-9v622RfxvYxcSUDSZBAEwwN7zkTvRuEjgBc1hJosfQY=";
+        nativeBuildInputs = nativeBuildInputs;
+        buildInputs = buildInputs;
+        postInstall = ''
+          wrapProgram $out/bin/abelscreensaver \
+            --prefix PATH : ${pkgs.lib.makeBinPath [pkgs.ffmpeg]}
+        '';
       };
       apps.default = {
         type = "app";
@@ -25,18 +33,16 @@
       };
       devShell = with pkgs;
         mkShell {
-          buildInputs = [
-            cargo
-            rustc
-            rust-analyzer
-            rustfmt
-            clippy
-            mpv
-            cmake
-            pkg-config
-            fontconfig
-            ffmpeg
-          ];
+          nativeBuildInputs =
+            nativeBuildInputs
+            ++ buildInputs
+            ++ [
+              cargo
+              rustc
+              rust-analyzer
+              rustfmt
+              clippy
+            ];
         };
     });
 }
