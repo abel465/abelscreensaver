@@ -15,7 +15,7 @@
       buildInputs = with pkgs; [fontconfig mpv ffmpeg];
       nativeBuildInputs = with pkgs; [makeWrapper cmake pkg-config];
     in rec {
-      abelscreensaver = pkgs.rustPlatform.buildRustPackage {
+      packages.default = pkgs.rustPlatform.buildRustPackage {
         pname = "abelscreensaver";
         version = "0.0.0";
         src = ./.;
@@ -29,7 +29,7 @@
       };
       apps.default = {
         type = "app";
-        program = "${abelscreensaver}/bin/abelscreensaver";
+        program = "${packages.default}/bin/abelscreensaver";
       };
       devShell = with pkgs;
         mkShell {
