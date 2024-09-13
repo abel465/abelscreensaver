@@ -12,15 +12,17 @@
   }:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {inherit system;};
-      buildInputs = with pkgs; [fontconfig mpv ffmpeg];
-      nativeBuildInputs = with pkgs; [makeWrapper cmake pkg-config];
+      buildInputs = with pkgs; [mpv ffmpeg];
     in rec {
       packages.default = pkgs.rustPlatform.buildRustPackage {
         pname = "abelscreensaver";
         version = "0.0.0";
         src = ./.;
-        cargoHash = "sha256-9v622RfxvYxcSUDSZBAEwwN7zkTvRuEjgBc1hJosfQY=";
-        nativeBuildInputs = nativeBuildInputs;
+        cargoLock.lockFile = ./Cargo.lock;
+        cargoLock.outputHashes = {
+          "egui-0.28.1" = "sha256-/2aiBKv85XW+dnn+T45e5UxTH0nyhKcHYHfklFSTu7U=";
+        };
+        nativeBuildInputs = [pkgs.makeWrapper];
         buildInputs = buildInputs;
         postInstall = ''
           wrapProgram $out/bin/abelscreensaver \
@@ -34,8 +36,7 @@
       devShell = with pkgs;
         mkShell {
           nativeBuildInputs =
-            nativeBuildInputs
-            ++ buildInputs
+            buildInputs
             ++ [
               cargo
               rustc

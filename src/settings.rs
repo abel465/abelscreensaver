@@ -130,7 +130,7 @@ impl Options {
                                     }
                                     if focus_last_path && i == length - 1 {
                                         text_edit.scroll_to_me(None);
-                                        ui.memory().request_focus(text_edit.id);
+                                        ui.memory_mut(|memory| memory.request_focus(text_edit.id));
                                     }
                                     remove_button(ui).clicked().then_some(i).or(remove_index)
                                 })
@@ -168,7 +168,7 @@ fn remove_button(ui: &mut egui::Ui) -> egui::Response {
         min: pos2(min_rect.max.x - x, min_rect.min.y + 3.0),
         max: pos2(min_rect.max.x, min_rect.max.y - 3.0),
     };
-    ui.allocate_ui_at_rect(rect, |ui| {
+    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(rect), |ui| {
         ui.centered_and_justified(|ui| {
             let (rect, response) = ui.allocate_at_least(Vec2::splat(x), egui::Sense::click());
             let visuals = ui.style().interact(&response);
@@ -179,6 +179,9 @@ fn remove_button(ui: &mut egui::Ui) -> egui::Response {
             ui.painter().line_segment([p, p + Vec2::splat(d)], stroke);
             ui.painter()
                 .line_segment([p + d * Vec2::X, p + d * Vec2::Y], stroke);
+            if response.hovered() {
+                ui.output_mut(|output| output.cursor_icon = egui::CursorIcon::Default);
+            }
             response
         })
         .inner

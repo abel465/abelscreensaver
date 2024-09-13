@@ -1,28 +1,28 @@
+use crate::mpvclient::MpvClient;
+use crate::runner::UserEvent;
 use crate::settings::Options;
-use crate::{mpvclient::MpvClient, runner::UserEvent};
-use egui::vec2;
-use egui_extras::RetainedImage;
-use glutin::{dpi::PhysicalSize, event_loop::EventLoopProxy};
+use egui::{include_image, vec2, Image, Sense, Vec2};
+use egui_glow::egui_winit::winit;
 use std::time::{Duration, Instant};
+use winit::dpi::PhysicalSize;
+use winit::event_loop::EventLoopProxy;
 
 struct ImageToggleButton {
-    images: [RetainedImage; 2],
+    images: [Image<'static>; 2],
     on: bool,
 }
 
 impl ImageToggleButton {
-    fn new(image_on: RetainedImage, image_off: RetainedImage, on: bool) -> Self {
+    fn new(image_on: Image<'static>, image_off: Image<'static>, on: bool) -> Self {
         Self {
             images: [image_on, image_off],
             on,
         }
     }
 
-    fn ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) -> egui::Response {
+    fn ui(&mut self, ui: &mut egui::Ui) -> egui::Response {
         let image = &self.images[self.on as usize];
-        ui.add(
-            egui::Image::new(image.texture_id(ctx), image.size_vec2()).sense(egui::Sense::click()),
-        )
+        ui.add_sized(Vec2::splat(25.0), image.clone())
     }
 
     fn toggle(&mut self) -> bool {
@@ -39,7 +39,7 @@ enum ImageVariants {
 }
 
 struct SettingsGui {
-    icon: RetainedImage,
+    icon: Image<'static>,
     opts: Options,
     opts_copy: Options,
     open: bool,
@@ -48,11 +48,7 @@ struct SettingsGui {
 impl SettingsGui {
     fn new(opts: Options) -> Self {
         Self {
-            icon: RetainedImage::from_svg_bytes(
-                "settings",
-                std::include_bytes!("../assets/svg/settings.svg"),
-            )
-            .unwrap(),
+            icon: Image::new(include_image!("../assets/svg/settings.svg")).sense(Sense::click()),
             opts_copy: opts.clone(),
             opts,
             open: false,
@@ -63,19 +59,13 @@ impl SettingsGui {
         &mut self,
         ctx: &egui::Context,
         ui: &mut egui::Ui,
-        event_proxy: EventLoopProxy<UserEvent>,
+        event_proxy: &EventLoopProxy<UserEvent>,
     ) -> Option<egui::Response> {
-        if ui
-            .add(
-                egui::Image::new(self.icon.texture_id(ctx), self.icon.size_vec2())
-                    .sense(egui::Sense::click()),
-            )
-            .clicked()
-        {
+        if ui.add(self.icon.clone()).clicked() {
             self.open = !self.open;
         }
         let size = vec2(290.0, 160.0);
-        let window_size = ctx.input().screen_rect().size();
+        let window_size = ctx.input(|input| input.screen_rect().size());
         let mut open = self.open;
         let resp = egui::Window::new("Settings")
             .open(&mut open)
@@ -112,7 +102,7 @@ impl SettingsGui {
         self.opts = self.opts_copy.clone();
     }
 
-    fn close_apply(&mut self, event_proxy: EventLoopProxy<UserEvent>) {
+    fn close_apply(&mut self, event_proxy: &EventLoopProxy<UserEvent>) {
         self.open = false;
         if self.opts != self.opts_copy {
             self.opts_copy = self.opts.clone();
@@ -130,71 +120,43 @@ pub struct Overlay {
     last_center_render_instant: Instant,
     center_pos: egui::Pos2,
     center_image_index: usize,
-    center_images: [RetainedImage; 4],
+    center_images: [Image<'static>; 4],
     mute_toggle_button: ImageToggleButton,
     pause_toggle_button: ImageToggleButton,
     settings_gui: SettingsGui,
     keep_visible: bool,
-    path_copy_instant: Instant,
 }
 
 impl Overlay {
     const DURATION_HALF: Duration = Duration::from_millis(500);
     const DURATION: Duration = Duration::from_millis(1000);
+    const CENTER_IMAGE_SIZE: Vec2 = Vec2::splat(200.0);
 
     pub fn new(size: PhysicalSize<u32>, opts: Options) -> Self {
+        let center_images = [
+            Image::new(include_image!("../assets/svg/mute.svg")).sense(Sense::click()),
+            Image::new(include_image!("../assets/svg/unmute.svg")).sense(Sense::click()),
+            Image::new(include_image!("../assets/svg/pause.svg")).sense(Sense::click()),
+            Image::new(include_image!("../assets/svg/play.svg")).sense(Sense::click()),
+        ];
+
         let mute_toggle_button = ImageToggleButton::new(
-            RetainedImage::from_svg_bytes(
-                "unmute",
-                std::include_bytes!("../assets/svg/unmute.svg"),
-            )
-            .unwrap(),
-            RetainedImage::from_svg_bytes("mute", std::include_bytes!("../assets/svg/mute.svg"))
-                .unwrap(),
+            Image::new(include_image!("./../assets/svg/unmute.svg")).sense(Sense::click()),
+            Image::new(include_image!("./../assets/svg/mute.svg")).sense(Sense::click()),
             opts.mute,
         );
 
         let pause_toggle_button = ImageToggleButton::new(
-            RetainedImage::from_svg_bytes("play", std::include_bytes!("../assets/svg/pause.svg"))
-                .unwrap(),
-            RetainedImage::from_svg_bytes("pause", std::include_bytes!("../assets/svg/play.svg"))
-                .unwrap(),
+            Image::new(include_image!("./../assets/svg/pause.svg")).sense(Sense::click()),
+            Image::new(include_image!("./../assets/svg/play.svg")).sense(Sense::click()),
             false,
         );
-
-        let center_images = [
-            RetainedImage::from_svg_bytes_with_size(
-                "mute-center",
-                std::include_bytes!("../assets/svg/mute.svg"),
-                egui_extras::image::FitTo::Zoom(6.0),
-            )
-            .unwrap(),
-            RetainedImage::from_svg_bytes_with_size(
-                "unmute-center",
-                std::include_bytes!("../assets/svg/unmute.svg"),
-                egui_extras::image::FitTo::Zoom(6.0),
-            )
-            .unwrap(),
-            RetainedImage::from_svg_bytes_with_size(
-                "pause-center",
-                std::include_bytes!("../assets/svg/pause.svg"),
-                egui_extras::image::FitTo::Zoom(6.0),
-            )
-            .unwrap(),
-            RetainedImage::from_svg_bytes_with_size(
-                "play-center",
-                std::include_bytes!("../assets/svg/play.svg"),
-                egui_extras::image::FitTo::Zoom(6.0),
-            )
-            .unwrap(),
-        ];
 
         let inactive_instant = Instant::now() - Self::DURATION * 10;
 
         Self {
             path: String::new(),
-            center_pos: ((vec2(size.width as f32, size.height as f32)
-                - center_images[0].size_vec2())
+            center_pos: ((vec2(size.width as f32, size.height as f32) - Self::CENTER_IMAGE_SIZE)
                 / 2.0)
                 .to_pos2(),
             center_image_index: 0,
@@ -206,7 +168,6 @@ impl Overlay {
             pause_toggle_button,
             has_media: true,
             keep_visible: false,
-            path_copy_instant: inactive_instant,
         }
     }
 
@@ -214,28 +175,42 @@ impl Overlay {
         &mut self,
         ctx: &egui::Context,
         mpv_client: &MpvClient,
-        event_proxy: EventLoopProxy<UserEvent>,
+        event_proxy: &EventLoopProxy<UserEvent>,
     ) {
-        if self.last_ui_render_instant.elapsed() < Self::DURATION_HALF || self.keep_visible {
-            self.bottom_panel(ctx, mpv_client, event_proxy);
-        } else if self.last_ui_render_instant.elapsed() > Self::DURATION {
-            ctx.output().cursor_icon = egui::CursorIcon::None;
-        }
+        ctx.output_mut(|output| {
+            output.cursor_icon = egui::CursorIcon::Default;
+        });
         if !self.has_media {
-            egui::Area::new("no_media")
+            egui::Area::new("no_media".into())
                 .interactable(false)
                 .fixed_pos(self.center_pos)
                 .show(ctx, |ui| {
-                    ui.label(egui::RichText::from("No Media").size(36.0));
+                    ui.horizontal_centered(|ui| {
+                        let font_size = 36.0;
+                        ui.add_sized(
+                            vec2(Self::CENTER_IMAGE_SIZE.x, font_size),
+                            egui::Label::new(egui::RichText::from("No Media").size(font_size)),
+                        );
+                    });
                 });
         }
         if self.last_center_render_instant.elapsed() < Self::DURATION {
-            egui::Area::new("center_area")
+            egui::Area::new("center_area".into())
                 .interactable(false)
                 .fixed_pos(self.center_pos)
                 .show(ctx, |ui| {
-                    self.center_images[self.center_image_index].show(ui);
+                    ui.add_sized(
+                        Self::CENTER_IMAGE_SIZE,
+                        self.center_images[self.center_image_index].clone(),
+                    );
                 });
+        }
+        if self.last_ui_render_instant.elapsed() < Self::DURATION_HALF || self.keep_visible {
+            self.bottom_panel(ctx, mpv_client, event_proxy);
+        } else if self.last_ui_render_instant.elapsed() > Self::DURATION {
+            ctx.output_mut(|output| {
+                output.cursor_icon = egui::CursorIcon::None;
+            });
         }
     }
 
@@ -243,21 +218,21 @@ impl Overlay {
         &mut self,
         ctx: &egui::Context,
         mpv_client: &MpvClient,
-        event_proxy: EventLoopProxy<UserEvent>,
+        event_proxy: &EventLoopProxy<UserEvent>,
     ) {
         let egui::InnerResponse { response, inner } = egui::TopBottomPanel::bottom("bottom_panel")
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
-                    if self.pause_toggle_button.ui(ctx, ui).clicked() {
+                    if self.pause_toggle_button.ui(ui).clicked() {
                         mpv_client.set_pause(self.pause_toggle_button.toggle());
                     }
-                    if self.mute_toggle_button.ui(ctx, ui).clicked() {
+                    if self.mute_toggle_button.ui(ui).clicked() {
                         mpv_client.set_mute(self.mute_toggle_button.toggle());
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let resp = self.settings_gui.show(ctx, ui, event_proxy);
                         if self.has_media {
-                            self.path_label(ctx, ui)
+                            self.path_label(ctx, ui);
                         }
                         resp
                     })
@@ -268,7 +243,7 @@ impl Overlay {
         if response.clicked_elsewhere() && inner.is_some_and(|r| r.clicked_elsewhere()) {
             self.settings_gui.close_cancel();
         }
-        self.keep_visible = if self.settings_gui.open || response.hovered() {
+        self.keep_visible = if self.settings_gui.open || response.contains_pointer() {
             self.last_ui_render_instant = Instant::now();
             true
         } else {
@@ -277,7 +252,7 @@ impl Overlay {
     }
 
     fn path_label(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
-        let path_label_width = egui::Area::new("phantom_path_label")
+        let path_label_width = egui::Area::new("phantom_path_label".into())
             .interactable(false)
             .show(ctx, |ui| {
                 ui.add_visible(
@@ -290,21 +265,7 @@ impl Overlay {
             .width();
         let available_width = ui.available_width();
         ui.add_space((available_width - path_label_width) / 2.0);
-        if ui
-            .add(
-                egui::Label::new(egui::RichText::new(&self.path).size(14.0))
-                    .sense(egui::Sense::click()),
-            )
-            .on_hover_text(if self.path_copy_instant.elapsed() < Self::DURATION * 2 {
-                "Copied"
-            } else {
-                "Click to copy"
-            })
-            .clicked()
-        {
-            ui.output().copied_text = self.path.clone();
-            self.path_copy_instant = Instant::now();
-        }
+        ui.label(egui::RichText::new(&self.path).size(14.0));
     }
 
     pub fn toggle_mute(&mut self, mpv_client: &MpvClient) {

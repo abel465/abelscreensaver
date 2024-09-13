@@ -6,12 +6,19 @@ edition = "2021"
 [dependencies]
 auto_enums = "0.8.5"
 bisection = "0.1.0"
-egui_glow = { version = "0.20", features = ["winit"] }
-egui = { version = "0.20", default-features = false, features = [
+egui_glow = { version = "0.28.1", features = [
+  "winit",
+  "wayland",
+  "clipboard",
+], git = "https://github.com/emilk/egui.git" }
+egui = { version = "0.28.1", default-features = false, features = [
   "default_fonts",
-] }
-egui_extras = { version = "0.20", default-features = false, features = ["svg"] }
-glutin = "0.29"
+], git = "https://github.com/emilk/egui.git" }
+egui_extras = { version = "0.28.1", features = [
+  "svg",
+], git = "https://github.com/emilk/egui.git" }
+glutin = { version = "0.32.0" }
+glutin-winit = { version = "0.5.0" }
 mime_guess = "2.0.4"
 rand = "0.8.5"
 structopt = "0.3.26"
