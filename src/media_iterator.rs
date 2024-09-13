@@ -170,7 +170,19 @@ pub fn random_media_iterator(opts: Options) -> RandomMediaIterator {
 }
 
 #[auto_enum(Iterator)]
-pub fn media_iterator(opts: Options) -> impl Iterator<Item = PathBuf> {
+pub fn media_iterator(mut opts: Options) -> impl Iterator<Item = PathBuf> {
+    let users_dirs = directories::UserDirs::new().unwrap();
+    for path in &mut opts.paths {
+        if path.starts_with("~/") {
+            *path = PathBuf::from(
+                users_dirs
+                    .home_dir()
+                    .join(&path.to_str().unwrap().to_string()[2..])
+                    .to_str()
+                    .unwrap(),
+            );
+        }
+    }
     if opts.random {
         random_media_iterator(opts)
     } else {
