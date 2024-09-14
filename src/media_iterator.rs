@@ -62,7 +62,7 @@ fn populate(opts: Options, tx: SyncSender<PathBuf>) {
                     }
                 } else {
                     next = loop {
-                        if paths.len() > 9 {
+                        if paths.len() > 99 {
                             let i = rng.gen_range(0..paths.len());
                             let target = paths.swap_remove(i);
                             if ffprobe::ffprobe(&target).is_ok() {
