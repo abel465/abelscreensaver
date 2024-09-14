@@ -2,7 +2,6 @@ use crate::Options;
 use auto_enums::auto_enum;
 use mime_guess::mime;
 use rand::{thread_rng, Rng};
-use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
@@ -32,19 +31,21 @@ impl std::iter::Iterator for RandomMediaIterator {
 }
 
 fn populate(opts: Options, tx: SyncSender<PathBuf>) {
-    let mut dirs = VecDeque::from(opts.paths);
+    let mut dirs = opts.paths;
     let mut paths = vec![];
     let mut next = None;
     let mut rng = thread_rng();
 
-    while let Some(dir) = dirs.pop_front() {
+    while !dirs.is_empty() {
+        let i = rng.gen_range(0..dirs.len());
+        let dir = dirs.swap_remove(i);
         if let Ok(entries) = fs::read_dir(&dir) {
             for entry in entries.filter_map(|x| x.ok()) {
                 let file_name = entry.file_name();
                 if opts.hidden || !is_hidden(file_name.as_os_str()) {
                     if let Ok(ft) = entry.file_type() {
                         if ft.is_dir() {
-                            dirs.push_back(entry.path());
+                            dirs.push(entry.path());
                         } else if ft.is_file() && is_valid_media(file_name, opts.video) {
                             paths.push(entry.path());
                             if paths.len() > 9 {
