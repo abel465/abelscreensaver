@@ -103,9 +103,10 @@ fn is_hidden(str: &OsStr) -> bool {
     str.to_str().unwrap().starts_with('.')
 }
 
-pub fn unspecified_media_iterator(opts: Options) -> impl Iterator<Item = PathBuf> {
+pub fn sequential_media_iterator(opts: Options) -> impl Iterator<Item = PathBuf> {
     opts.paths.into_iter().flat_map(move |dir| {
         WalkDir::new(dir)
+            .sort_by_file_name()
             .into_iter()
             .filter_entry(move |x| opts.hidden || !is_hidden(x.file_name()))
             .filter_map(|x| x.ok())
@@ -137,6 +138,6 @@ pub fn media_iterator(mut opts: Options) -> impl Iterator<Item = PathBuf> {
     if opts.random {
         random_media_iterator(opts)
     } else {
-        unspecified_media_iterator(opts)
+        sequential_media_iterator(opts)
     }
 }
