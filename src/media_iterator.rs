@@ -48,20 +48,24 @@ fn populate(opts: Options, tx: SyncSender<PathBuf>) {
                             dirs.push(entry.path());
                         } else if ft.is_file() && is_valid_media(file_name, opts.video) {
                             paths.push(entry.path());
-                            if paths.len() > 9 {
-                                if next.is_none() {
-                                    next = loop {
-                                        let i = rng.gen_range(0..paths.len());
-                                        let target = paths.swap_remove(i);
-                                        if ffprobe::ffprobe(&target).is_ok() {
-                                            break Some(target);
-                                        }
-                                    }
-                                }
-                                match tx.try_send(next.take().unwrap()) {
+                            match next.take() {
+                                Some(path) => match tx.try_send(path) {
                                     Ok(()) => {}
                                     Err(TrySendError::Full(x)) => next = Some(x),
                                     Err(TrySendError::Disconnected(_)) => return,
+                                },
+                                None => {
+                                    next = loop {
+                                        if paths.len() > 9 {
+                                            let i = rng.gen_range(0..paths.len());
+                                            let target = paths.swap_remove(i);
+                                            if ffprobe::ffprobe(&target).is_ok() {
+                                                break Some(target);
+                                            }
+                                        } else {
+                                            break None;
+                                        }
+                                    }
                                 }
                             }
                         }
