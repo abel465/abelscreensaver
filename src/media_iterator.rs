@@ -39,35 +39,37 @@ fn populate(opts: Options, tx: SyncSender<PathBuf>) {
     while !dirs.is_empty() {
         let i = rng.gen_range(0..dirs.len());
         let dir = dirs.swap_remove(i);
-        if let Ok(entries) = fs::read_dir(&dir) {
-            for entry in entries.filter_map(|x| x.ok()) {
-                let file_name = entry.file_name();
-                if opts.hidden || !is_hidden(file_name.as_os_str()) {
-                    if let Ok(ft) = entry.file_type() {
-                        if ft.is_dir() {
-                            dirs.push(entry.path());
-                        } else if ft.is_file() && is_valid_media(file_name, opts.video) {
-                            paths.push(entry.path());
-                            match next.take() {
-                                Some(path) => match tx.try_send(path) {
-                                    Ok(()) => {}
-                                    Err(TrySendError::Full(x)) => next = Some(x),
-                                    Err(TrySendError::Disconnected(_)) => return,
-                                },
-                                None => {
-                                    next = loop {
-                                        if paths.len() > 9 {
-                                            let i = rng.gen_range(0..paths.len());
-                                            let target = paths.swap_remove(i);
-                                            if ffprobe::ffprobe(&target).is_ok() {
-                                                break Some(target);
-                                            }
-                                        } else {
-                                            break None;
-                                        }
-                                    }
-                                }
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.filter_map(|x| x.ok()) {
+            let file_name = entry.file_name();
+            if !opts.hidden && is_hidden(file_name.as_os_str()) {
+                continue;
+            }
+            let Ok(ft) = entry.file_type() else {
+                continue;
+            };
+            if ft.is_dir() {
+                dirs.push(entry.path());
+            } else if ft.is_file() && is_valid_media(file_name, opts.video) {
+                paths.push(entry.path());
+                if let Some(path) = next.take() {
+                    match tx.try_send(path) {
+                        Ok(()) => {}
+                        Err(TrySendError::Full(x)) => next = Some(x),
+                        Err(TrySendError::Disconnected(_)) => return,
+                    }
+                } else {
+                    next = loop {
+                        if paths.len() > 9 {
+                            let i = rng.gen_range(0..paths.len());
+                            let target = paths.swap_remove(i);
+                            if ffprobe::ffprobe(&target).is_ok() {
+                                break Some(target);
                             }
+                        } else {
+                            break None;
                         }
                     }
                 }
