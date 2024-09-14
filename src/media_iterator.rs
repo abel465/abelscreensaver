@@ -1,74 +1,25 @@
 use crate::Options;
 use auto_enums::auto_enum;
 use mime_guess::mime;
-use rand::{rngs::ThreadRng, thread_rng, Rng};
+use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::{fs, thread};
 use walkdir::WalkDir;
 
-struct RandomMediaOpts {
-    all: bool,
-    video: bool,
-}
-
-impl RandomMediaOpts {
-    pub fn new(all: bool, video: bool) -> Self {
-        Self { all, video }
-    }
-}
-
-struct RandomMediaData {
-    keys: Vec<usize>,
-    values: Vec<PathBuf>,
-    indices: Vec<usize>,
-    count: usize,
-}
-
-impl RandomMediaData {
-    pub fn new() -> Self {
-        Self {
-            keys: vec![],
-            values: vec![],
-            indices: vec![],
-            count: 0,
-        }
-    }
-
-    fn get_random(&mut self, rng: &mut ThreadRng) -> (usize, PathBuf) {
-        let i = rng.gen_range(0..self.count);
-        self.count -= 1;
-        let n = self.indices.swap_remove(i);
-        let key = bisection::bisect_right(&self.keys, &n) - 1;
-        (n - self.keys[key], self.values[key].clone())
-    }
-}
-
 pub struct RandomMediaIterator {
-    data: Arc<Mutex<RandomMediaData>>,
-    opts: RandomMediaOpts,
-    rx: Receiver<()>,
-    rng: ThreadRng,
+    rx: Receiver<PathBuf>,
 }
 
 impl RandomMediaIterator {
     pub fn new(opts: Options) -> Self {
-        let (tx, rx) = channel();
-        let data = Arc::new(Mutex::new(RandomMediaData::new()));
-        let data_copy = data.clone();
-        let media_opts = RandomMediaOpts::new(opts.hidden, opts.video);
+        let (tx, rx) = sync_channel(3);
 
-        thread::spawn(move || populate(data_copy, opts, tx));
+        thread::spawn(move || populate(opts, tx));
 
-        Self {
-            data,
-            opts: media_opts,
-            rx,
-            rng: thread_rng(),
-        }
+        Self { rx }
     }
 }
 
@@ -76,43 +27,18 @@ impl std::iter::Iterator for RandomMediaIterator {
     type Item = PathBuf;
 
     fn next(&mut self) -> Option<Self::Item> {
-        'a: loop {
-            while self.data.lock().unwrap().count == 0 {
-                if self.rx.recv().is_err() {
-                    break 'a;
-                }
-            }
-            let (target, dir) = self.data.lock().unwrap().get_random(&mut self.rng);
-            if let Ok(entries) = fs::read_dir(&dir) {
-                let mut count = 0;
-                for entry in entries.filter_map(|x| x.ok()) {
-                    let file_name = entry.file_name();
-                    if (self.opts.all || !is_hidden(file_name.as_os_str()))
-                        && entry.file_type().is_ok_and(|x| x.is_file())
-                        && is_valid_media(file_name, self.opts.video)
-                    {
-                        if count == target {
-                            let path = entry.path();
-                            match ffprobe::ffprobe(&path) {
-                                Ok(_) => return Some(path),
-                                Err(_) => continue 'a,
-                            }
-                        }
-                        count += 1;
-                    }
-                }
-            }
-        }
-        None
+        self.rx.recv().ok()
     }
 }
 
-fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Options, tx: Sender<()>) {
+fn populate(opts: Options, tx: SyncSender<PathBuf>) {
     let mut dirs = VecDeque::from(opts.paths);
+    let mut paths = vec![];
+    let mut next = None;
+    let mut rng = thread_rng();
 
     while let Some(dir) = dirs.pop_front() {
         if let Ok(entries) = fs::read_dir(&dir) {
-            let mut count = 0;
             for entry in entries.filter_map(|x| x.ok()) {
                 let file_name = entry.file_name();
                 if opts.hidden || !is_hidden(file_name.as_os_str()) {
@@ -120,19 +46,43 @@ fn populate(data: Arc<Mutex<RandomMediaData>>, opts: Options, tx: Sender<()>) {
                         if ft.is_dir() {
                             dirs.push_back(entry.path());
                         } else if ft.is_file() && is_valid_media(file_name, opts.video) {
-                            count += 1;
+                            paths.push(entry.path());
+                            if paths.len() > 9 {
+                                if next.is_none() {
+                                    next = loop {
+                                        let i = rng.gen_range(0..paths.len());
+                                        let target = paths.swap_remove(i);
+                                        if ffprobe::ffprobe(&target).is_ok() {
+                                            break Some(target);
+                                        }
+                                    }
+                                }
+                                match tx.try_send(next.take().unwrap()) {
+                                    Ok(()) => {}
+                                    Err(TrySendError::Full(x)) => next = Some(x),
+                                    Err(TrySendError::Disconnected(_)) => return,
+                                }
+                            }
                         }
                     }
                 }
             }
-            let mut data = data.lock().unwrap();
-            let current_count = data.count;
-            data.keys.push(current_count);
-            data.values.push(dir);
-            data.indices.extend(current_count..current_count + count);
-            data.count += count;
-
-            tx.send(()).ok();
+        }
+    }
+    if let Some(target) = next {
+        if ffprobe::ffprobe(&target).is_ok() {
+            if tx.send(target).is_err() {
+                return;
+            }
+        }
+    }
+    while !paths.is_empty() {
+        let i = rng.gen_range(0..paths.len());
+        let target = paths.swap_remove(i);
+        if ffprobe::ffprobe(&target).is_ok() {
+            if tx.send(target).is_err() {
+                return;
+            }
         }
     }
 }
