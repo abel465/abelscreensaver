@@ -34,6 +34,12 @@ impl MpvClient {
         self.mpv.command("loadfile", &[&quoted, "append"]).unwrap();
     }
 
+    pub fn need_append(&self) -> bool {
+        let playlist_pos = self.mpv.get_property::<i64>("playlist-pos").unwrap();
+        let playlist_count = self.mpv.get_property::<i64>("playlist-count").unwrap();
+        playlist_count - playlist_pos < 3
+    }
+
     pub fn playlist_replace(&self, path: &Path) {
         let quoted = format!("'{}'", path.to_str().unwrap());
         self.mpv.command("loadfile", &[&quoted]).unwrap();

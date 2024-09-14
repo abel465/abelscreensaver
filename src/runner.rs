@@ -251,8 +251,10 @@ impl ApplicationHandler<UserEvent> for Runner {
             UserEvent::MPVEvents => loop {
                 match mpv_client.next_event() {
                     Some(Ok(MPVEvent::FileLoaded)) => {
-                        if let Some(path) = self.it.next() {
-                            mpv_client.playlist_append(&path);
+                        if mpv_client.need_append() {
+                            if let Some(path) = self.it.next() {
+                                mpv_client.playlist_append(&path);
+                            }
                         }
                         overlay.has_media = *has_media;
                     }
